@@ -1,3 +1,5 @@
+@import url('https://cdn.jsdelivr.net/gh/neodgm/neodgm-webfont@1.530/neodgm/style.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,7 +10,8 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #0f172a; /* Slate-900 */
+  background-color: #86efac; /* Bright retro green background */
+  font-family: 'NeoDunggeunmo', 'Courier New', monospace;
 }
 
 #root {

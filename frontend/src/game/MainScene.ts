@@ -91,17 +91,18 @@ export class MainScene extends Phaser.Scene {
             // Fill
             const rect = this.add.rectangle(x, y, width, height, color, 0.4)
                 .setOrigin(0, 0)
-                .setStrokeStyle(2, color, 1.0); // Restored border
+                .setStrokeStyle(3, color, 1.0); // Thicker retro border
             this.mapContainer.add(rect);
 
-            // Restored Label
+            // Restored Label with Pixel Font
             const text = this.add.text(x + 8, y + 8, zone.name, { 
-                fontSize: '14px', 
-                color: '#333333', 
-                fontStyle: 'bold',
-                backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                fontFamily: 'NeoDunggeunmo',
+                fontSize: '18px', 
+                color: '#000000', 
+                backgroundColor: '#ffffff',
                 padding: { x: 4, y: 2 }
             });
+            text.setStroke('#000000', 2);
             this.mapContainer.add(text);
         });
 
@@ -111,17 +112,17 @@ export class MainScene extends Phaser.Scene {
                 const x = obs[0] * this.gridSize;
                 const y = obs[1] * this.gridSize;
                 
-                // Sleek Dark Blocks for the final look
-                const rect = this.add.rectangle(x, y, this.gridSize, this.gridSize, 0x1e293b, 1.0)
+                // Solid black block for retro wall
+                const rect = this.add.rectangle(x, y, this.gridSize, this.gridSize, 0x374151, 1.0)
                     .setOrigin(0, 0)
-                    .setStrokeStyle(2, 0xffffff);
+                    .setStrokeStyle(2, 0x000000);
                 this.mapContainer.add(rect);
             });
         }
 
         // Grid lines at the end
         const graphics = this.add.graphics();
-        graphics.lineStyle(1, 0x000000, 0.1);
+        graphics.lineStyle(2, 0x000000, 0.1); // Thicker grid lines
         for (let i = 0; i <= data.width; i++) {
             graphics.moveTo(i * this.gridSize, 0);
             graphics.lineTo(i * this.gridSize, data.height * this.gridSize);
@@ -160,23 +161,26 @@ export class MainScene extends Phaser.Scene {
         
         // Name Label
         const label = this.add.text(0, 25, data.name, { 
-          fontSize: '10px', 
+          fontFamily: 'NeoDunggeunmo',
+          fontSize: '12px', 
           color: '#ffffff',
-          backgroundColor: '#1e293b',
+          backgroundColor: '#000000',
           padding: { x: 4, y: 2 }
         }).setOrigin(0.5);
 
         // Speech Bubble
-        const bubble = this.add.text(0, -40, "", {
-          fontSize: '11px',
-          color: '#1e293b',
+        const bubble = this.add.text(0, -35, "", {
+          fontFamily: 'NeoDunggeunmo',
+          fontSize: '14px',
+          color: '#000000',
           backgroundColor: '#ffffff',
-          padding: { x: 8, y: 5 },
-          wordWrap: { width: 140 },
-          align: 'center'
+          padding: { x: 8, y: 6 },
+          wordWrap: { width: 150 },
+          align: 'center',
         }).setOrigin(0.5, 1).setVisible(false);
         
-        // Add shadow/border to bubble if possible (simplified here)
+        // Add retro border to bubble
+        bubble.setStroke('#000000', 3);
         
         container.add([body, label, bubble]);
         this.agentSprites.set(id, { container, body, label, bubble });
@@ -189,17 +193,14 @@ export class MainScene extends Phaser.Scene {
           targets: spriteData.container,
           x: targetX,
           y: targetY,
-          duration: 600,
-          ease: 'Cubic.easeOut'
+          duration: 400, // Faster, snappier movement for retro feel
+          ease: 'Linear'
         });
 
         // Update speech bubble
         if (data.current_speech && data.current_speech.trim() !== "") {
           spriteData.bubble.setText(data.current_speech);
           spriteData.bubble.setVisible(true);
-          
-          // Auto-hide bubble after 5 seconds if speech doesn't change
-          // (In a real app, you might want to handle this via the backend state)
         } else {
           spriteData.bubble.setVisible(false);
         }
