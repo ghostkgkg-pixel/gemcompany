@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import uuid
 import os
+import asyncio
+from pathfinding import AStar
 
 # Phase 2 & 3 modules
 from persona import PersonaManager
@@ -69,10 +71,9 @@ class MapTemplate(BaseModel):
     width: int
     height: int
     zones: List[MapZone]
+    obstacles: List[List[int]] = [] # List of [x, y]
 
-import asyncio
-
-class AgentStatus(BaseModel):
+class Agent(BaseModel):
     id: str
     name: str
     persona: Dict
@@ -81,12 +82,13 @@ class AgentStatus(BaseModel):
     y: int
     target_x: Optional[int] = None
     target_y: Optional[int] = None
+    path: List[List[int]] = [] # Current calculated path [[x1, y1], [x2, y2]...]
     current_action: str
     current_thought: str
     current_speech: str
 
 # --- In-memory Storage ---
-agents: Dict[str, AgentStatus] = {}
+agents: Dict[str, Agent] = {}
 current_map: Optional[MapTemplate] = None
 
 # --- World Engine (Movement) ---
@@ -94,27 +96,47 @@ current_map: Optional[MapTemplate] = None
 async def world_tick_loop():
     """Periodic loop to update agent positions."""
     while True:
-        moved = False
-        for agent_id, agent in agents.items():
+        m = current_map or MAP_TEMPLATES["standard_office"]
+        # Convert obstacles to tuples for A*
+        obs_tuples = [(o[0], o[1]) for o in m.obstacles]
+        astar = AStar(m.width, m.height, obs_tuples)
+        
+        changed = False
+        for agent in agents.values():
             if agent.target_x is not None and agent.target_y is not None:
-                # Simple step-by-step movement
-                dx = agent.target_x - agent.x
-                dy = agent.target_y - agent.y
+                # If target changed or no path, calculate new path
+                target = (agent.target_x, agent.target_y)
+                current = (agent.x, agent.y)
                 
-                if dx != 0:
-                    agent.x += 1 if dx > 0 else -1
-                    moved = True
-                elif dy != 0:
-                    agent.y += 1 if dy > 0 else -1
-                    moved = True
-                else:
-                    # Arrived at destination
+                if current == target:
                     agent.target_x = None
                     agent.target_y = None
+                    agent.path = []
                     agent.current_action = "Idle"
-                    moved = True
+                    changed = True
+                    continue
+
+                # Recalculate path if needed
+                if not agent.path or tuple(agent.path[-1]) != target:
+                    new_path = astar.find_path(current, target)
+                    if new_path:
+                        agent.path = [list(p) for p in new_path]
+                    else:
+                        # Unreachable
+                        agent.target_x = None
+                        agent.target_y = None
+                        agent.path = []
+                        agent.current_action = "Unreachable"
+                        changed = True
+                        continue
+                
+                # Move to the next step in path
+                if agent.path:
+                    next_step = agent.path.pop(0)
+                    agent.x, agent.y = next_step[0], next_step[1]
+                    changed = True
         
-        if moved:
+        if changed:
             await broadcast_agents()
             
         await asyncio.sleep(0.5) # Speed of movement
@@ -145,7 +167,8 @@ MAP_TEMPLATES = {
             MapZone(name="Meeting Room", aliases=["회의실", "미팅룸", "meeting"], x1=0, y1=0, x2=4, y2=4, color="#e3f2fd", icon="groups"),
             MapZone(name="Work Zone", aliases=["업무구역", "사무실", "데스크", "work"], x1=5, y1=0, x2=9, y2=9, color="#f5f5f5", icon="desktop_windows"),
             MapZone(name="Break Area", aliases=["휴게실", "탕비실", "카페", "break"], x1=0, y1=5, x2=4, y2=9, color="#e8f5e9", icon="coffee")
-        ]
+        ],
+        obstacles=[[4, 5], [4, 6], [4, 7], [4, 8], [4, 9]] # A wall/partition separating zones
     ),
     "minimal_cafe": MapTemplate(
         id="minimal_cafe",

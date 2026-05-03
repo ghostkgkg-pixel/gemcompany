@@ -45,6 +45,56 @@ export class MainScene extends Phaser.Scene {
     });
   }
 
+  private syncMap(data: any) {
+    this.mapContainer.removeAll(true);
+    this.gridSize = 40;
+
+    // Draw Zones
+    data.zones.forEach((zone: any) => {
+        const width = (zone.x2 - zone.x1 + 1) * this.gridSize;
+        const height = (zone.y2 - zone.y1 + 1) * this.gridSize;
+        const x = zone.x1 * this.gridSize;
+        const y = zone.y1 * this.gridSize;
+
+        const rect = this.add.rectangle(x, y, width, height, Phaser.Display.Color.HexStringToColor(zone.color).color, 0.3)
+            .setOrigin(0, 0);
+        this.mapContainer.add(rect);
+
+        // Add Zone Name
+        const text = this.add.text(x + 5, y + 5, zone.name, { fontSize: '12px', color: '#666', fontStyle: 'bold' });
+        this.mapContainer.add(text);
+    });
+
+    // Draw Obstacles (Walls/Furniture)
+    if (data.obstacles) {
+        data.obstacles.forEach((obs: [number, number]) => {
+            const x = obs[0] * this.gridSize;
+            const y = obs[1] * this.gridSize;
+            
+            // Draw a sleek dark block for obstacles
+            const rect = this.add.rectangle(x, y, this.gridSize, this.gridSize, 0x333333, 0.8)
+                .setOrigin(0, 0)
+                .setStrokeStyle(1, 0x000000);
+            this.mapContainer.add(rect);
+            
+            // Add a subtle "wall" pattern or icon if desired
+        });
+    }
+
+    // Draw Grid Lines
+    const graphics = this.add.graphics();
+    graphics.lineStyle(1, 0x000000, 0.05);
+    for (let i = 0; i <= data.width; i++) {
+        graphics.moveTo(i * this.gridSize, 0);
+        graphics.lineTo(i * this.gridSize, data.height * this.gridSize);
+    }
+    for (let j = 0; j <= data.height; j++) {
+        graphics.moveTo(0, j * this.gridSize);
+        graphics.lineTo(data.width * this.gridSize, j * this.gridSize);
+    }
+    this.mapContainer.add(graphics);
+  }
+
   private syncAgents(agents: Record<string, any>) {
     const gridSize = 40;
 

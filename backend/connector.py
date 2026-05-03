@@ -16,22 +16,35 @@ class GeminiConnector:
 
     def _execute(self, args, input_data=None):
         try:
-            # Use the specified model (gemini-3.1-pro-preview) by default
-            # We insert it at the beginning of args if not present
             if "-m" not in args:
                 args = ["-m", "gemini-3.1-pro-preview"] + args
             
+            # Use shell=True only if necessary, but here we try to be robust with encoding
             result = subprocess.run(
                 [self.binary] + args,
                 input=input_data,
                 capture_output=True,
                 text=True,
                 check=True,
-                encoding='utf-8'
+                encoding='utf-8', # Default to UTF-8
+                errors='replace'   # Don't crash on decoding errors
+            )
+            return result.stdout
+        except UnicodeDecodeError:
+            # Fallback for Windows CP949 if UTF-8 fails
+            result = subprocess.run(
+                [self.binary] + args,
+                input=input_data,
+                capture_output=True,
+                text=True,
+                check=True,
+                encoding='cp949',
+                errors='replace'
             )
             return result.stdout
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             if self.fallback_binary and self.binary != self.fallback_binary:
+                # Same logic for fallback binary
                 try:
                     result = subprocess.run(
                         [self.fallback_binary] + args,
@@ -39,7 +52,19 @@ class GeminiConnector:
                         capture_output=True,
                         text=True,
                         check=True,
-                        encoding='utf-8'
+                        encoding='utf-8',
+                        errors='replace'
+                    )
+                    return result.stdout
+                except UnicodeDecodeError:
+                    result = subprocess.run(
+                        [self.fallback_binary] + args,
+                        input=input_data,
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                        encoding='cp949',
+                        errors='replace'
                     )
                     return result.stdout
                 except Exception as e2:
@@ -47,10 +72,9 @@ class GeminiConnector:
             raise e
 
     def send_prompt(self, prompt: str) -> str:
-        # Use -p for non-interactive mode. 
-        # On Windows, passing large or non-ASCII strings via CLI args can be flaky.
-        # However, gemini-cli's -p is the primary way for headless mode.
-        stdout = self._execute(["-p", prompt])
+        # Use -p "" and send the actual prompt via stdin to avoid Windows command line encoding issues.
+        # This is the most robust way to handle non-ASCII characters on Windows CLI.
+        stdout = self._execute(["-p", ""], input_data=prompt)
         # Clean up output - remove common agent warnings if they leaked to stdout
         # We use regex to remove them surgically as they might be on the same line as the response
         markers = [
@@ -65,7 +89,8 @@ class GeminiConnector:
         return clean_stdout.strip()
 
     def send_prompt_json(self, prompt: str) -> dict:
-        stdout = self._execute(["-p", prompt])
+        # Use -p "" and send the actual prompt via stdin to avoid Windows command line encoding issues.
+        stdout = self._execute(["-p", ""], input_data=prompt)
         # Find JSON block
         json_match = re.search(r'(\{.*\}|\[.*\])', stdout, re.DOTALL)
         if json_match:
