@@ -2,8 +2,6 @@ import Phaser from 'phaser';
 import { useGameStore } from '../store/useGameStore';
 
 export class MainScene extends Phaser.Scene {
-  private zones: Phaser.GameObjects.Graphics[] = [];
-
   constructor() {
     super('MainScene');
   }
