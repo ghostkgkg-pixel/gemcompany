@@ -11,6 +11,9 @@ export class MainScene extends Phaser.Scene {
   private agentSprites: Map<string, { container: Phaser.GameObjects.Container, body: Phaser.GameObjects.Sprite, label: Phaser.GameObjects.Text, bubble: Phaser.GameObjects.Text }> = new Map();
 
   private unsubscribe: (() => void) | null = null;
+  
+  private mapContainer!: Phaser.GameObjects.Container;
+  private gridSize: number = 40;
 
   preload() {
     this.load.image('agent', 'assets/agent.png');
