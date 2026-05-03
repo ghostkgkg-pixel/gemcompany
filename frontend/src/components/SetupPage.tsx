@@ -29,6 +29,13 @@ export function SetupPage({ onStart }: SetupPageProps) {
       try {
         const t = await axios.get('http://localhost:8000/map/templates');
         setTemplates(t.data);
+        
+        // Also fetch current map if not set
+        const { currentMap, setMap } = useGameStore.getState();
+        if (!currentMap) {
+          const m = await axios.get('http://localhost:8000/map/current');
+          setMap(m.data);
+        }
       } catch (err) {
         console.error("Failed to load map templates", err);
       }
@@ -181,11 +188,18 @@ export function SetupPage({ onStart }: SetupPageProps) {
                 가구 선택
               </h3>
               
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 {[
-                  { id: 'obstacle_desk', name: '업무용 책상', img: 'assets/obstacle_desk.png' },
-                  { id: 'obstacle_table', name: '회의용 테이블', img: 'assets/obstacle_table.png' },
-                  { id: 'obstacle_plant', name: '인테리어 화분', img: 'assets/obstacle_plant.png' },
+                  { id: 'obstacle_desk', name: '책상 A', img: 'assets/obstacle_desk.png' },
+                  { id: 'obstacle_desk_2', name: '책상 B', img: 'assets/obstacle_desk.png' },
+                  { id: 'obstacle_desk_3', name: '책상 C', img: 'assets/obstacle_desk.png' },
+                  { id: 'obstacle_table', name: '테이블 A', img: 'assets/obstacle_table.png' },
+                  { id: 'obstacle_table_2', name: '테이블 B', img: 'assets/obstacle_table.png' },
+                  { id: 'obstacle_table_3', name: '테이블 C', img: 'assets/obstacle_table.png' },
+                  { id: 'obstacle_plant', name: '화분 A', img: 'assets/obstacle_plant.png' },
+                  { id: 'obstacle_plant_2', name: '화분 B', img: 'assets/obstacle_plant.png' },
+                  { id: 'obstacle_plant_3', name: '화분 C', img: 'assets/obstacle_plant.png' },
+                  { id: 'obstacle_wall', name: '벽 (구분선)', img: '' },
                 ].map(item => (
                   <button 
                     key={item.id}
@@ -194,10 +208,17 @@ export function SetupPage({ onStart }: SetupPageProps) {
                       selectedTool === item.id ? 'bg-blue-100 ring-2 ring-blue-500' : 'bg-gray-50'
                     }`}
                   >
-                    <img src={item.img} alt={item.name} className="w-12 h-12 object-contain pixelated" />
-                    <span className="text-xs font-bold">{item.name}</span>
+                    {item.img ? (
+                      <img src={item.img} alt={item.name} className={`w-12 h-12 object-contain pixelated ${
+                        item.id.includes('_2') ? 'sepia-[0.3]' : item.id.includes('_3') ? 'brightness-75' : ''
+                      }`} />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-800 border-2 border-black" />
+                    )}
+                    <span className="text-[10px] font-bold">{item.name}</span>
                   </button>
                 ))}
+              </div>
                 
                 <button 
                   onClick={() => setSelectedTool('eraser')}
@@ -210,12 +231,11 @@ export function SetupPage({ onStart }: SetupPageProps) {
                   </div>
                   <span className="text-xs font-bold text-red-600">지우개 (철거)</span>
                 </button>
-              </div>
               
-              <div className="mt-auto bg-blue-50 p-3 border-2 border-black text-[10px] leading-tight font-bold">
-                * 맵 위를 클릭하면 가구가 배치됩니다.<br/>
-                * 지우개로 기존 가구를 지울 수 있습니다.
-              </div>
+                <div className="mt-auto bg-blue-50 p-3 border-2 border-black text-[10px] leading-tight font-bold">
+                  * 맵 위를 클릭하면 가구가 배치됩니다.<br/>
+                  * 지우개로 기존 가구를 지울 수 있습니다.
+                </div>
             </aside>
             
             {/* Editor Canvas */}

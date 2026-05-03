@@ -104,7 +104,7 @@ async def world_tick_loop():
     while True:
         m = current_map or MAP_TEMPLATES["standard_office"]
         # Convert obstacles to tuples for A*
-        obs_tuples = [(o[0], o[1]) for o in m.obstacles]
+        obs_tuples = [(o.x, o.y) for o in m.obstacles]
         astar = AStar(m.width, m.height, obs_tuples)
         
         changed = False

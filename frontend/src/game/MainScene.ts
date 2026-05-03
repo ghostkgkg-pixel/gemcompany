@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { useGameStore } from '../store/useGameStore';
+import { placeObstacle, removeObstacle } from '../services/api';
 
 export class MainScene extends Phaser.Scene {
   constructor() {
@@ -38,13 +39,8 @@ export class MainScene extends Phaser.Scene {
     create() {
     this.mapContainer = this.add.container(0, 0);
 
-    // Create a transparent interactive background for reliable click detection
-    const interactiveBg = this.add.rectangle(0, 0, 2000, 2000, 0x000000, 0)
-        .setOrigin(0, 0)
-        .setInteractive();
-
     // INTERACTIVE MAP EDITOR: Click to toggle obstacle
-    interactiveBg.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
+    this.input.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
         const { currentMap, buildMode, selectedTool } = useGameStore.getState();
         if (!buildMode) return;
 
@@ -56,8 +52,8 @@ export class MainScene extends Phaser.Scene {
         const y = Math.floor(mapY / this.gridSize);
         
         if (currentMap && x >= 0 && x < currentMap.width && y >= 0 && y < currentMap.height) {
+            console.log(`Placement request: ${x}, ${y}, ${selectedTool}`);
             try {
-                const { placeObstacle, removeObstacle } = await import('../services/api');
                 if (selectedTool === 'eraser') {
                     await removeObstacle(x, y);
                 } else {
@@ -66,6 +62,8 @@ export class MainScene extends Phaser.Scene {
             } catch (error) {
                 console.error("Failed to update obstacle:", error);
             }
+        } else {
+            console.log(`Click out of bounds or map missing: ${x}, ${y}`);
         }
     });
 
@@ -145,13 +143,41 @@ export class MainScene extends Phaser.Scene {
         // Draw Obstacles (Furniture)
         if (data.obstacles && data.obstacles.length > 0) {
             data.obstacles.forEach((obs: any) => {
-                const i = obs.x;
-                const j = obs.y;
-                const obsKey = obs.type || 'obstacle_desk';
+                // Support both old [x, y] and new {x, y} formats just in case
+                const i = typeof obs.x === 'number' ? obs.x : obs[0];
+                const j = typeof obs.y === 'number' ? obs.y : obs[1];
+                let obsKey = obs.type || 'obstacle_desk';
                 
-                const tile = this.add.image(i * this.gridSize + this.gridSize/2, j * this.gridSize + this.gridSize/2, obsKey)
+                if (typeof i !== 'number' || typeof j !== 'number') return;
+
+                // Handle Wall separately as a geometric shape
+                if (obsKey === 'obstacle_wall') {
+                    const wall = this.add.rectangle(i * this.gridSize, j * this.gridSize, this.gridSize, this.gridSize, 0x475569)
+                        .setOrigin(0, 0);
+                    // Add a simple top border to give it depth
+                    const top = this.add.rectangle(i * this.gridSize, j * this.gridSize, this.gridSize, 4, 0x1e293b).setOrigin(0,0);
+                    this.mapContainer.add(wall);
+                    this.mapContainer.add(top);
+                    return;
+                }
+
+                // Handle variations by tinting base assets
+                let tint = 0xffffff;
+                let baseKey = obsKey;
+                if (obsKey.includes('_2')) {
+                    baseKey = obsKey.replace('_2', '');
+                    tint = 0xddddff; // Bluish/Silver
+                    if (obsKey.includes('plant')) tint = 0x88ff88; // Lighter green
+                } else if (obsKey.includes('_3')) {
+                    baseKey = obsKey.replace('_3', '');
+                    tint = 0xffe4b5; // Wooden/Warm
+                    if (obsKey.includes('plant')) tint = 0x556b2f; // Olive green
+                }
+
+                const tile = this.add.image(i * this.gridSize + this.gridSize/2, j * this.gridSize + this.gridSize/2, baseKey)
                     .setOrigin(0.5, 0.5)
-                    .setDisplaySize(this.gridSize * 0.7, this.gridSize * 0.7);
+                    .setDisplaySize(this.gridSize * 1.8, this.gridSize * 1.8)
+                    .setTint(tint);
                 this.mapContainer.add(tile);
             });
         }
@@ -223,7 +249,7 @@ export class MainScene extends Phaser.Scene {
         const outfitPart = app.outfit || 'agent_dev';
         const hairPart = app.hair || 'none';
 
-        const spriteSize = Math.floor(gridSize * 1.3);
+        const spriteSize = Math.floor(gridSize * 2.5);
 
         const bodySprite = this.add.sprite(0, 0, bodyPart).setDisplaySize(spriteSize, spriteSize);
         const outfitSprite = this.add.sprite(0, 0, outfitPart).setDisplaySize(spriteSize, spriteSize);
