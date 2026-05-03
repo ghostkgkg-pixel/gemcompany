@@ -13,7 +13,7 @@ export class MainScene extends Phaser.Scene {
   private unsubscribe: (() => void) | null = null;
   
   private mapContainer!: Phaser.GameObjects.Container;
-  private gridSize: number = 70; // Increased from 40 to 70 for a much larger map
+  private gridSize: number = 40;
 
   preload() {
     this.load.image('agent', 'assets/agent.png');
@@ -77,7 +77,7 @@ export class MainScene extends Phaser.Scene {
 
     private syncMap(data: any) {
         this.mapContainer.removeAll(true);
-        this.gridSize = 70; // Update grid size here too
+        this.gridSize = 40;
 
         // Draw Zones with colors, borders, and labels
         data.zones.forEach((zone: any) => {
@@ -135,7 +135,7 @@ export class MainScene extends Phaser.Scene {
     }
 
   private syncAgents(agents: Record<string, any>) {
-    const gridSize = 70; // Update local grid size for agents
+    const gridSize = 40;
 
     // Remove agents that are no longer in the store
     for (const [id, spriteData] of this.agentSprites.entries()) {
@@ -157,7 +157,7 @@ export class MainScene extends Phaser.Scene {
         
         // Body (Sprite)
         const body = this.add.sprite(0, 0, 'agent');
-        body.setDisplaySize(56, 56); // Scaled up for larger grid
+        body.setDisplaySize(32, 32);
         
         // Name Label
         const label = this.add.text(0, 35, data.name, { 

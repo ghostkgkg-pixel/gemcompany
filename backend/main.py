@@ -274,14 +274,14 @@ MAP_TEMPLATES = {
     "standard_office": MapTemplate(
         id="standard_office",
         name="Standard Office",
-        width=10,
-        height=10,
+        width=20,
+        height=15,
         zones=[
-            MapZone(name="Meeting Room", aliases=["회의실", "미팅룸", "meeting"], x1=0, y1=0, x2=4, y2=4, color="#e3f2fd", icon="groups"),
-            MapZone(name="Work Zone", aliases=["업무구역", "사무실", "데스크", "work"], x1=5, y1=0, x2=9, y2=9, color="#f5f5f5", icon="desktop_windows"),
-            MapZone(name="Break Area", aliases=["휴게실", "탕비실", "카페", "break"], x1=0, y1=5, x2=4, y2=9, color="#e8f5e9", icon="coffee")
+            MapZone(name="Meeting Room", aliases=["회의실", "미팅룸", "meeting"], x1=0, y1=0, x2=7, y2=6, color="#e3f2fd", icon="groups"),
+            MapZone(name="Work Zone", aliases=["업무구역", "사무실", "데스크", "work"], x1=8, y1=0, x2=19, y2=14, color="#f5f5f5", icon="desktop_windows"),
+            MapZone(name="Break Area", aliases=["휴게실", "탕비실", "카페", "break"], x1=0, y1=7, x2=7, y2=14, color="#e8f5e9", icon="coffee")
         ],
-        obstacles=[[4, 5], [4, 6], [4, 7], [4, 8], [4, 9]] # A wall/partition separating zones
+        obstacles=[[7, 7], [7, 8], [7, 9], [7, 10], [7, 11], [7, 12], [7, 13], [7, 14], [0, 6], [1, 6], [2, 6], [3, 6], [4, 6], [5, 6], [6, 6], [7, 6]]
     ),
     "minimal_cafe": MapTemplate(
         id="minimal_cafe",
