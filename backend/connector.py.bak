@@ -14,16 +14,10 @@ class GeminiConnector:
             self.binary = binary
             self.fallback_binary = None
 
-    def _execute(self, args, input_data=None):
+    def _execute(self, args):
         try:
-            # Use the specified model (gemini-3.1-pro-preview) by default
-            # We insert it at the beginning of args if not present
-            if "-m" not in args:
-                args = ["-m", "gemini-3.1-pro-preview"] + args
-            
             result = subprocess.run(
                 [self.binary] + args,
-                input=input_data,
                 capture_output=True,
                 text=True,
                 check=True,
@@ -35,7 +29,6 @@ class GeminiConnector:
                 try:
                     result = subprocess.run(
                         [self.fallback_binary] + args,
-                        input=input_data,
                         capture_output=True,
                         text=True,
                         check=True,
@@ -47,9 +40,7 @@ class GeminiConnector:
             raise e
 
     def send_prompt(self, prompt: str) -> str:
-        # Use -p for non-interactive mode. 
-        # On Windows, passing large or non-ASCII strings via CLI args can be flaky.
-        # However, gemini-cli's -p is the primary way for headless mode.
+        # Use -p for non-interactive mode
         stdout = self._execute(["-p", prompt])
         # Clean up output - remove common agent warnings if they leaked to stdout
         # We use regex to remove them surgically as they might be on the same line as the response

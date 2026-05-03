@@ -55,6 +55,7 @@ async def broadcast_map(map_data):
 # --- Models ---
 class MapZone(BaseModel):
     name: str
+    aliases: List[str] = [] # Keywords like ["회의실", "meeting", "room"]
     x1: int
     y1: int
     x2: int
@@ -141,9 +142,9 @@ MAP_TEMPLATES = {
         width=10,
         height=10,
         zones=[
-            MapZone(name="Meeting Room", x1=0, y1=0, x2=4, y2=4, color="#e3f2fd", icon="groups"),
-            MapZone(name="Work Zone", x1=5, y1=0, x2=9, y2=9, color="#f5f5f5", icon="desktop_windows"),
-            MapZone(name="Break Area", x1=0, y1=5, x2=4, y2=9, color="#e8f5e9", icon="coffee")
+            MapZone(name="Meeting Room", aliases=["회의실", "미팅룸", "meeting"], x1=0, y1=0, x2=4, y2=4, color="#e3f2fd", icon="groups"),
+            MapZone(name="Work Zone", aliases=["업무구역", "사무실", "데스크", "work"], x1=5, y1=0, x2=9, y2=9, color="#f5f5f5", icon="desktop_windows"),
+            MapZone(name="Break Area", aliases=["휴게실", "탕비실", "카페", "break"], x1=0, y1=5, x2=4, y2=9, color="#e8f5e9", icon="coffee")
         ]
     ),
     "minimal_cafe": MapTemplate(
@@ -152,8 +153,8 @@ MAP_TEMPLATES = {
         width=8,
         height=8,
         zones=[
-            MapZone(name="Counter", x1=0, y1=0, x2=7, y2=2, color="#fff3e0", icon="store"),
-            MapZone(name="Tables", x1=1, y1=3, x2=6, y2=7, color="#fafafa", icon="table_restaurant")
+            MapZone(name="Counter", aliases=["카운터", "주문", "데스크"], x1=0, y1=0, x2=7, y2=2, color="#fff3e0", icon="store"),
+            MapZone(name="Tables", aliases=["테이블", "좌석", "자리"], x1=1, y1=3, x2=6, y2=7, color="#fafafa", icon="table_restaurant")
         ]
     ),
     "zen_garden": MapTemplate(
@@ -228,32 +229,67 @@ async def chat_with_agent(agent_id: str, message: str):
     agent = agents[agent_id]
     connector = GeminiConnector()
     
-    # System prompt to ensure JSON response for the simulation
+    # Get current map zones to give context to the agent
+    m = current_map or MAP_TEMPLATES["standard_office"]
+    zones_info = [f"{z.name} (area: {z.x1},{z.y1} to {z.x2},{z.y2})" for z in m.zones]
+    
+    # System prompt to ensure JSON response and zone awareness
     prompt = f"""
     ROLE: You are an AI agent in a 2D virtual office simulation.
     PERSONA: {agent.persona}
-    CONTEXT: You are at ({agent.x}, {agent.y}) in the office.
+    CONTEXT: 
+    - Current Position: ({agent.x}, {agent.y})
+    - Available Zones: {[(z.name, z.aliases) for z in m.zones]}
     
     USER MESSAGE: "{message}"
     
     INSTRUCTION: Respond to the user's message while staying in character. 
-    You must provide your internal thought process and your external speech.
+    You can respond in the user's language (e.g. Korean).
+    
+    CRITICAL: If you decide to move, you MUST include the exact Zone Name 
+    from the list above in your "action" field.
+    Example: "Moving to Meeting Room" or "Going to Break Area".
     
     RESPONSE FORMAT (JSON ONLY):
     {{
-        "thought": "short internal reasoning about the message",
-        "speech": "your spoken response to the user",
-        "action": "current status or immediate intended action (e.g. 'Thinking', 'Greeting user')"
+        "thought": "short internal reasoning",
+        "speech": "your spoken response",
+        "action": "Moving to [Zone Name]" or "Idle" or "Working"
     }}
     """
     
     try:
         # Use the connector to get a JSON response from gemini-cli
         response_data = connector.send_prompt_json(prompt)
+        print(f"Engine Response for {agent.name}: {response_data}") # Debug log
         
         agent.current_thought = response_data.get("thought", "...")
         agent.current_speech = response_data.get("speech", "Hello!")
-        agent.current_action = response_data.get("action", agent.current_action)
+        action_text = response_data.get("action", "Idle")
+        agent.current_action = action_text
+        
+        # --- Test 11: Parse action and trigger movement (Enhanced) ---
+        found_zone = False
+        action_lower = action_text.lower()
+        
+        for zone in m.zones:
+            # Check for exact name match
+            if zone.name.lower() in action_lower:
+                found_zone = True
+            else:
+                # Check for alias matches (Korean etc)
+                for alias in zone.aliases:
+                    if alias.lower() in action_lower:
+                        found_zone = True
+                        break
+            
+            if found_zone:
+                # Set target to the center of the zone
+                agent.target_x = (zone.x1 + zone.x2) // 2
+                agent.target_y = (zone.y1 + zone.y2) // 2
+                agent.current_action = f"Moving to {zone.name}"
+                print(f"Match found! Moving {agent.name} to {zone.name} at ({agent.target_x}, {agent.target_y})")
+                break
         
         await broadcast_agents()
         return agent
