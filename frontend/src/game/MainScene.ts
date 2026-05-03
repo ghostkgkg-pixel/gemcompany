@@ -46,7 +46,7 @@ export class MainScene extends Phaser.Scene {
   }
 
     private syncMap(data: any) {
-        console.log("Map Update Received:", data); // Debug Log
+        console.log("CRITICAL DEBUG - Map Data:", data);
         this.mapContainer.removeAll(true);
         this.gridSize = 40;
 
@@ -60,32 +60,27 @@ export class MainScene extends Phaser.Scene {
             const rect = this.add.rectangle(x, y, width, height, Phaser.Display.Color.HexStringToColor(zone.color).color, 0.3)
                 .setOrigin(0, 0);
             this.mapContainer.add(rect);
-
-            const text = this.add.text(x + 5, y + 5, zone.name, { fontSize: '12px', color: '#666', fontStyle: 'bold' });
-            this.mapContainer.add(text);
         });
 
-        // Draw Obstacles (Walls/Furniture) - FORCED VISIBILITY
-        if (data.obstacles && data.obstacles.length > 0) {
-            console.log("Drawing Obstacles on Canvas:", data.obstacles);
-            data.obstacles.forEach((obs: any) => {
+        // DRAW DIRECTLY ON SCENE (NOT CONTAINER) FOR DEBUGGING
+        if (data.obstacles) {
+            data.obstacles.forEach((obs: any, index: number) => {
                 const x = obs[0] * this.gridSize;
                 const y = obs[1] * this.gridSize;
                 
-                // Use a different shape (Circle) for testing if rectangle is invisible
-                const rect = this.add.rectangle(x, y, this.gridSize - 2, this.gridSize - 2, 0xff0000, 1.0)
-                    .setOrigin(0, 0)
-                    .setStrokeStyle(3, 0xffffff)
-                    .setDepth(100); // Force to top
-                this.mapContainer.add(rect);
+                console.log(`Actually drawing obstacle ${index} at ${x}, ${y}`);
                 
-                console.log(`Obstacle drawn at ${x}, ${y}`);
+                // Huge Red Square to ensure visibility
+                this.add.rectangle(x, y, 38, 38, 0xff0000, 1.0)
+                    .setOrigin(0, 0)
+                    .setDepth(2000) // Extremely high depth
+                    .setStrokeStyle(4, 0xffff00); // Yellow border
             });
         }
 
-        // Draw Grid Lines
+        // Grid lines at the end
         const graphics = this.add.graphics();
-        graphics.lineStyle(1, 0x000000, 0.1);
+        graphics.lineStyle(1, 0x000000, 0.2);
         for (let i = 0; i <= data.width; i++) {
             graphics.moveTo(i * this.gridSize, 0);
             graphics.lineTo(i * this.gridSize, data.height * this.gridSize);
