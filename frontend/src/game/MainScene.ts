@@ -8,9 +8,13 @@ export class MainScene extends Phaser.Scene {
     super('MainScene');
   }
 
-  private agentSprites: Map<string, { container: Phaser.GameObjects.Container, body: Phaser.GameObjects.Arc, label: Phaser.GameObjects.Text, bubble: Phaser.GameObjects.Text }> = new Map();
+  private agentSprites: Map<string, { container: Phaser.GameObjects.Container, body: Phaser.GameObjects.Sprite, label: Phaser.GameObjects.Text, bubble: Phaser.GameObjects.Text }> = new Map();
 
   private unsubscribe: (() => void) | null = null;
+
+  preload() {
+    this.load.image('agent', 'assets/agent.png');
+  }
 
   create() {
     this.renderMap();
@@ -62,26 +66,29 @@ export class MainScene extends Phaser.Scene {
         // Create new agent container
         const container = this.add.container(targetX, targetY);
         
-        // Body (Circle for now)
-        const body = this.add.arc(0, 0, 15, 0, 360, false, 0x6366f1);
-        body.setStrokeStyle(2, 0xffffff);
+        // Body (Sprite)
+        const body = this.add.sprite(0, 0, 'agent');
+        body.setDisplaySize(32, 32);
         
         // Name Label
-        const label = this.add.text(0, -25, data.name, { 
-          fontSize: '12px', 
+        const label = this.add.text(0, 25, data.name, { 
+          fontSize: '10px', 
           color: '#ffffff',
           backgroundColor: '#1e293b',
           padding: { x: 4, y: 2 }
         }).setOrigin(0.5);
 
         // Speech Bubble
-        const bubble = this.add.text(0, -50, "", {
+        const bubble = this.add.text(0, -40, "", {
           fontSize: '11px',
           color: '#1e293b',
           backgroundColor: '#ffffff',
-          padding: { x: 6, y: 4 },
-          wordWrap: { width: 120 }
-        }).setOrigin(0.5).setVisible(false);
+          padding: { x: 8, y: 5 },
+          wordWrap: { width: 140 },
+          align: 'center'
+        }).setOrigin(0.5, 1).setVisible(false);
+        
+        // Add shadow/border to bubble if possible (simplified here)
         
         container.add([body, label, bubble]);
         this.agentSprites.set(id, { container, body, label, bubble });
@@ -94,14 +101,17 @@ export class MainScene extends Phaser.Scene {
           targets: spriteData.container,
           x: targetX,
           y: targetY,
-          duration: 500,
-          ease: 'Power2'
+          duration: 600,
+          ease: 'Cubic.easeOut'
         });
 
         // Update speech bubble
-        if (data.current_speech) {
+        if (data.current_speech && data.current_speech.trim() !== "") {
           spriteData.bubble.setText(data.current_speech);
           spriteData.bubble.setVisible(true);
+          
+          // Auto-hide bubble after 5 seconds if speech doesn't change
+          // (In a real app, you might want to handle this via the backend state)
         } else {
           spriteData.bubble.setVisible(false);
         }
