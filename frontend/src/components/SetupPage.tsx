@@ -185,10 +185,32 @@ export function SetupPage({ onStart }: SetupPageProps) {
             {/* Editor Sidebar */}
             <aside className="w-64 bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-4 flex flex-col gap-4 overflow-y-auto">
               <h3 className="font-bold border-b-2 border-black pb-2 flex items-center gap-2 uppercase tracking-tighter">
-                가구 선택
+                바닥(구역) 타일링
+              </h3>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {[
+                  { id: 'zone_work', name: '업무 구역', color: 'bg-gray-100' },
+                  { id: 'zone_meeting', name: '회의실 구역', color: 'bg-blue-100' },
+                  { id: 'zone_break', name: '휴게 구역', color: 'bg-green-100' },
+                ].map(item => (
+                  <button 
+                    key={item.id}
+                    onClick={() => setSelectedTool(item.id)}
+                    className={`p-2 border-2 border-black flex flex-col items-center gap-1 transition-all ${
+                      selectedTool === item.id ? 'ring-2 ring-blue-500' : ''
+                    } ${item.color}`}
+                  >
+                    <div className="w-8 h-8 border border-black shadow-inner" />
+                    <span className="text-[9px] font-bold">{item.name}</span>
+                  </button>
+                ))}
+              </div>
+
+              <h3 className="font-bold border-b-2 border-black pb-2 flex items-center gap-2 uppercase tracking-tighter">
+                가구 및 오브젝트
               </h3>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 {[
                   { id: 'obstacle_desk', name: '책상 A', img: 'assets/obstacle_desk.png' },
                   { id: 'obstacle_desk_2', name: '책상 B', img: 'assets/obstacle_desk.png' },

@@ -77,6 +77,7 @@ class MapTemplate(BaseModel):
     height: int
     zones: List[MapZone]
     obstacles: List[MapObstacle] = []
+    zone_data: Optional[List[List[str]]] = None # Tile-based zone types: 'work', 'meeting', 'break'
 
 class Agent(BaseModel):
     id: str
@@ -281,6 +282,31 @@ async def remove_obstacle(x: int, y: int):
     current_map = m
     await broadcast_map(current_map.dict())
     return {"message": f"Obstacle removed at ({x}, {y})", "obstacles": m.obstacles}
+
+@app.post("/map/zones/set")
+async def set_zone_tile(x: int, y: int, zone_type: str):
+    global current_map
+    m = current_map or MAP_TEMPLATES["standard_office"]
+    
+    # Initialize zone_data if it doesn't exist
+    if not m.zone_data:
+        m.zone_data = [["work" for _ in range(m.width)] for _ in range(m.height)]
+        # Populate from existing zones (rectangles)
+        for zone in m.zones:
+            z_type = "work"
+            if any(a in zone.aliases for a in ["회의실", "meeting"]): z_type = "meeting"
+            elif any(a in zone.aliases for a in ["휴게실", "break"]): z_type = "break"
+            
+            for j in range(max(0, zone.y1), min(m.height, zone.y2 + 1)):
+                for i in range(max(0, zone.x1), min(m.width, zone.x2 + 1)):
+                    m.zone_data[j][i] = z_type
+                    
+    if 0 <= x < m.width and 0 <= y < m.height:
+        m.zone_data[y][x] = zone_type
+        
+    current_map = m
+    await broadcast_map(current_map.dict())
+    return {"message": f"Zone at ({x}, {y}) set to {zone_type}", "zone_data": m.zone_data}
 
 # Default Templates
 MAP_TEMPLATES = {

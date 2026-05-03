@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { useGameStore } from '../store/useGameStore';
-import { placeObstacle, removeObstacle } from '../services/api';
+import { placeObstacle, removeObstacle, setZoneTile } from '../services/api';
 
 export class MainScene extends Phaser.Scene {
   constructor() {
@@ -56,11 +56,14 @@ export class MainScene extends Phaser.Scene {
             try {
                 if (selectedTool === 'eraser') {
                     await removeObstacle(x, y);
+                } else if (selectedTool.startsWith('zone_')) {
+                    const zoneType = selectedTool.replace('zone_', '');
+                    await setZoneTile(x, y, zoneType);
                 } else {
                     await placeObstacle(x, y, selectedTool);
                 }
             } catch (error) {
-                console.error("Failed to update obstacle:", error);
+                console.error("Failed to update tile:", error);
             }
         } else {
             console.log(`Click out of bounds or map missing: ${x}, ${y}`);
@@ -121,7 +124,11 @@ export class MainScene extends Phaser.Scene {
         for (let i = 0; i < data.width; i++) {
             for (let j = 0; j < data.height; j++) {
                 let zoneAlias = 'work';
-                if (data.zones) {
+                
+                // Use tile-based zone_data if available, otherwise fallback to rectangles
+                if (data.zone_data && data.zone_data[j] && data.zone_data[j][i]) {
+                    zoneAlias = data.zone_data[j][i];
+                } else if (data.zones) {
                     const zone = data.zones.find((z:any) => i >= z.x1 && i <= z.x2 && j >= z.y1 && j <= z.y2);
                     if (zone) {
                         if (zone.aliases.includes('회의실')) zoneAlias = 'meeting';
@@ -161,23 +168,30 @@ export class MainScene extends Phaser.Scene {
                     return;
                 }
 
-                // Handle variations by tinting base assets
+                // Handle variations by tinting and transforming base assets
                 let tint = 0xffffff;
+                let angle = 0;
+                let flipX = false;
                 let baseKey = obsKey;
+
                 if (obsKey.includes('_2')) {
                     baseKey = obsKey.replace('_2', '');
                     tint = 0xddddff; // Bluish/Silver
-                    if (obsKey.includes('plant')) tint = 0x88ff88; // Lighter green
+                    flipX = true; // Flip horizontally
+                    if (obsKey.includes('plant')) tint = 0x88ff88;
                 } else if (obsKey.includes('_3')) {
                     baseKey = obsKey.replace('_3', '');
                     tint = 0xffe4b5; // Wooden/Warm
-                    if (obsKey.includes('plant')) tint = 0x556b2f; // Olive green
+                    angle = 90; // Rotate 90 degrees
+                    if (obsKey.includes('plant')) tint = 0x556b2f;
                 }
 
                 const tile = this.add.image(i * this.gridSize + this.gridSize/2, j * this.gridSize + this.gridSize/2, baseKey)
                     .setOrigin(0.5, 0.5)
                     .setDisplaySize(this.gridSize * 1.8, this.gridSize * 1.8)
-                    .setTint(tint);
+                    .setTint(tint)
+                    .setAngle(angle)
+                    .setFlipX(flipX);
                 this.mapContainer.add(tile);
             });
         }

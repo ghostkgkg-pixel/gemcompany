@@ -36,3 +36,8 @@ export const removeObstacle = async (x: number, y: number) => {
   const response = await axios.post(`${API_BASE}/map/obstacles/remove?x=${x}&y=${y}`);
   return response.data;
 };
+
+export const setZoneTile = async (x: number, y: number, zoneType: string) => {
+  const response = await axios.post(`${API_BASE}/map/zones/set?x=${x}&y=${y}&zone_type=${zoneType}`);
+  return response.data;
+};
