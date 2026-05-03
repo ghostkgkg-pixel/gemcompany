@@ -149,9 +149,96 @@ async def world_tick_loop():
             
         await asyncio.sleep(0.5) # Speed of movement
 
+async def autonomous_decision_loop():
+    """Periodically wakes up an idle agent to make an autonomous decision."""
+    connector = GeminiConnector()
+    while True:
+        await asyncio.sleep(15) # Run every 15 seconds to avoid rate limits
+        if not agents:
+            continue
+            
+        m = current_map or MAP_TEMPLATES["standard_office"]
+        
+        # Find all idle agents
+        idle_agents = [a for a in agents.values() if a.current_action in ["Idle", "Unreachable"]]
+        if not idle_agents:
+            continue
+            
+        # Pick one random idle agent to act (simplifies the loop and saves quota)
+        import random
+        agent = random.choice(idle_agents)
+        
+        # Determine current zone
+        current_zone_name = "Hallway"
+        for z in m.zones:
+            if z.x1 <= agent.x <= z.x2 and z.y1 <= agent.y <= z.y2:
+                current_zone_name = z.name
+                break
+                
+        # Find nearby agents (within 3 units distance)
+        nearby_agents = []
+        for other in agents.values():
+            if other.id != agent.id:
+                dist = abs(agent.x - other.x) + abs(agent.y - other.y)
+                if dist <= 3:
+                    nearby_agents.append(f"{other.name} (at {other.x}, {other.y}, doing: {other.current_action})")
+                    
+        nearby_str = ", ".join(nearby_agents) if nearby_agents else "No one nearby."
+        
+        zones_info = [f"('{z.name}', {z.aliases})" for z in m.zones]
+        available_zones = f"[{', '.join(zones_info)}]"
+        
+        prompt = f"""
+    ROLE: You are an AI agent in a 2D virtual office simulation.
+    PERSONA: {agent.persona}
+    CONTEXT: 
+    - Current Position: ({agent.x}, {agent.y}) in {current_zone_name}
+    - Available Zones: {available_zones}
+    - Nearby Agents: {nearby_str}
+    
+    INSTRUCTION: You have some free time. Choose your next action autonomously based on your persona.
+    You can interact with someone nearby, move to a different zone, or just do your own thing.
+    If you decide to move, you MUST set "action" to exactly "Moving to [Zone Name]".
+    If you decide to stay, set "action" to "Idle" or a brief description of what you are doing (e.g. "Reading a book").
+    Speak in Korean if you want.
+    
+    RESPONSE FORMAT (JSON ONLY):
+    {{
+        "thought": "short internal reasoning based on surroundings",
+        "speech": "what you say out loud, or empty string",
+        "action": "Moving to [Zone Name]" or "Idle"
+    }}
+    """
+        try:
+            print(f"Triggering autonomous tick for {agent.name}")
+            response_data = connector.send_prompt_json(prompt)
+            
+            agent.current_thought = response_data.get("thought", "")
+            agent.current_speech = response_data.get("speech", "")
+            action = response_data.get("action", "Idle")
+            
+            if action.startswith("Moving to "):
+                target_zone_name = action.replace("Moving to ", "").strip()
+                target_zone = next((z for z in m.zones if z.name == target_zone_name or target_zone_name in z.aliases), None)
+                if target_zone:
+                    center_x = (target_zone.x1 + target_zone.x2) // 2
+                    center_y = (target_zone.y1 + target_zone.y2) // 2
+                    agent.target_x = center_x
+                    agent.target_y = center_y
+                    agent.current_action = f"Moving to {target_zone.name}"
+                else:
+                    agent.current_action = action
+            else:
+                agent.current_action = action
+                
+            await broadcast_agents()
+        except Exception as e:
+            print(f"Autonomous loop error for {agent.name}: {e}")
+
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(world_tick_loop())
+    asyncio.create_task(autonomous_decision_loop())
 
 # --- Endpoints ---
 
