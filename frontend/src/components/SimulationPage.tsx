@@ -3,7 +3,7 @@ import { GameCanvas } from './GameCanvas';
 import { useGameStore } from '../store/useGameStore';
 import { getMapCurrent, moveAgent, chatWithAgent } from '../services/api';
 import { initSocket } from '../services/socket';
-import { Users, Map as MapIcon, Navigation, MessageCircle } from 'lucide-react';
+import { Users, Map as MapIcon, Navigation, MessageCircle, Hammer, Eraser, Monitor, Table, Leaf } from 'lucide-react';
 import { LogOut } from 'lucide-react';
 
 interface SimulationPageProps {
@@ -16,6 +16,10 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
   const setMap = useGameStore((state: any) => state.setMap);
   const agentsObj = useGameStore((state: any) => state.agents);
   const currentMap = useGameStore((state: any) => state.currentMap);
+  const buildMode = useGameStore((state: any) => state.buildMode);
+  const toggleBuildMode = useGameStore((state: any) => state.toggleBuildMode);
+  const selectedTool = useGameStore((state: any) => state.selectedTool);
+  const setSelectedTool = useGameStore((state: any) => state.setSelectedTool);
 
   const agents = useMemo(() => Object.values(agentsObj || {}), [agentsObj]);
   
@@ -129,6 +133,46 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
               <div className="text-center text-gray-400 mt-10 text-sm">출근한 직원이 없습니다.</div>
             )}
           </div>
+        </section>
+
+        {/* Office Customization (Build Mode) */}
+        <section className="bg-white p-4 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2">
+          <button 
+            onClick={toggleBuildMode}
+            className={`w-full py-2 border-2 border-black font-bold flex items-center justify-center gap-2 transition-all ${buildMode ? 'bg-yellow-400 shadow-none translate-y-1' : 'bg-gray-200 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'}`}
+          >
+            <Hammer size={18} />
+            {buildMode ? '건설 모드 중단' : '오피스 꾸미기'}
+          </button>
+
+          {buildMode && (
+            <div className="grid grid-cols-2 gap-2 mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+              <button 
+                onClick={() => setSelectedTool('obstacle_desk')}
+                className={`p-2 border-2 border-black flex flex-col items-center gap-1 text-[10px] font-bold ${selectedTool === 'obstacle_desk' ? 'bg-blue-200' : 'bg-white'}`}
+              >
+                <Monitor size={20} /> 책상
+              </button>
+              <button 
+                onClick={() => setSelectedTool('obstacle_table')}
+                className={`p-2 border-2 border-black flex flex-col items-center gap-1 text-[10px] font-bold ${selectedTool === 'obstacle_table' ? 'bg-blue-200' : 'bg-white'}`}
+              >
+                <Table size={20} /> 테이블
+              </button>
+              <button 
+                onClick={() => setSelectedTool('obstacle_plant')}
+                className={`p-2 border-2 border-black flex flex-col items-center gap-1 text-[10px] font-bold ${selectedTool === 'obstacle_plant' ? 'bg-blue-200' : 'bg-white'}`}
+              >
+                <Leaf size={20} /> 화분
+              </button>
+              <button 
+                onClick={() => setSelectedTool('eraser')}
+                className={`p-2 border-2 border-black flex flex-col items-center gap-1 text-[10px] font-bold ${selectedTool === 'eraser' ? 'bg-red-200' : 'bg-white'}`}
+              >
+                <Eraser size={20} /> 지우개
+              </button>
+            </div>
+          )}
         </section>
       </aside>
 

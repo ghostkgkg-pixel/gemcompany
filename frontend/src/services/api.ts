@@ -27,7 +27,12 @@ export const chatWithAgent = async (agentId: string, message: string) => {
   return response.data;
 };
 
-export const toggleObstacle = async (x: number, y: number) => {
-  const response = await axios.post(`${API_BASE}/map/obstacles/toggle`, null, { params: { x, y } });
+export const placeObstacle = async (x: number, y: number, type: string) => {
+  const response = await axios.post(`${API_BASE}/map/obstacles/place`, null, { params: { x, y, type } });
+  return response.data;
+};
+
+export const removeObstacle = async (x: number, y: number) => {
+  const response = await axios.post(`${API_BASE}/map/obstacles/remove`, null, { params: { x, y } });
   return response.data;
 };

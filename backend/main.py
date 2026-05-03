@@ -65,13 +65,18 @@ class MapZone(BaseModel):
     color: Optional[str] = "#cccccc"
     icon: Optional[str] = "room"
 
+class MapObstacle(BaseModel):
+    x: int
+    y: int
+    type: str
+
 class MapTemplate(BaseModel):
     id: str
     name: str
     width: int
     height: int
     zones: List[MapZone]
-    obstacles: List[List[int]] = [] # List of [x, y]
+    obstacles: List[MapObstacle] = []
 
 class Agent(BaseModel):
     id: str
@@ -251,23 +256,30 @@ async def move_agent(agent_id: str, x: int, y: int):
     agents[agent_id].current_action = f"Moving to ({x}, {y})"
     return {"message": "Movement started", "target": (x, y)}
 
-@app.post("/map/obstacles/toggle")
-async def toggle_obstacle(x: int, y: int):
+@app.post("/map/obstacles/place")
+async def place_obstacle(x: int, y: int, type: str):
     global current_map
     m = current_map or MAP_TEMPLATES["standard_office"]
     
-    # Check if obstacle exists
-    obs = [x, y]
-    if obs in m.obstacles:
-        m.obstacles.remove(obs)
-        action = "removed"
-    else:
-        m.obstacles.append(obs)
-        action = "added"
+    # Remove existing obstacle at x, y if any
+    m.obstacles = [obs for obs in m.obstacles if not (obs.x == x and obs.y == y)]
+    # Add new obstacle
+    m.obstacles.append(MapObstacle(x=x, y=y, type=type))
     
     current_map = m
     await broadcast_map(current_map.dict())
-    return {"message": f"Obstacle {action} at ({x}, {y})", "obstacles": m.obstacles}
+    return {"message": f"Obstacle placed at ({x}, {y})", "obstacles": m.obstacles}
+
+@app.post("/map/obstacles/remove")
+async def remove_obstacle(x: int, y: int):
+    global current_map
+    m = current_map or MAP_TEMPLATES["standard_office"]
+    
+    m.obstacles = [obs for obs in m.obstacles if not (obs.x == x and obs.y == y)]
+    
+    current_map = m
+    await broadcast_map(current_map.dict())
+    return {"message": f"Obstacle removed at ({x}, {y})", "obstacles": m.obstacles}
 
 # Default Templates
 MAP_TEMPLATES = {
@@ -281,7 +293,25 @@ MAP_TEMPLATES = {
             MapZone(name="Work Zone", aliases=["업무구역", "사무실", "데스크", "work"], x1=9, y1=0, x2=33, y2=13, color="#f5f5f5", icon="desktop_windows"),
             MapZone(name="Break Area", aliases=["휴게실", "탕비실", "카페", "break"], x1=0, y1=6, x2=8, y2=13, color="#e8f5e9", icon="coffee")
         ],
-        obstacles=[[8, 6], [8, 7], [8, 8], [8, 9], [8, 10], [8, 11], [8, 12], [8, 13], [0, 5], [1, 5], [2, 5], [3, 5], [4, 5], [5, 5], [6, 5], [7, 5], [8, 5]]
+        obstacles=[
+            MapObstacle(x=8, y=6, type="obstacle_plant"),
+            MapObstacle(x=8, y=7, type="obstacle_plant"),
+            MapObstacle(x=8, y=8, type="obstacle_plant"),
+            MapObstacle(x=8, y=9, type="obstacle_plant"),
+            MapObstacle(x=8, y=10, type="obstacle_plant"),
+            MapObstacle(x=8, y=11, type="obstacle_plant"),
+            MapObstacle(x=8, y=12, type="obstacle_plant"),
+            MapObstacle(x=8, y=13, type="obstacle_plant"),
+            MapObstacle(x=0, y=5, type="obstacle_table"),
+            MapObstacle(x=1, y=5, type="obstacle_table"),
+            MapObstacle(x=2, y=5, type="obstacle_table"),
+            MapObstacle(x=3, y=5, type="obstacle_table"),
+            MapObstacle(x=4, y=5, type="obstacle_table"),
+            MapObstacle(x=5, y=5, type="obstacle_table"),
+            MapObstacle(x=6, y=5, type="obstacle_table"),
+            MapObstacle(x=7, y=5, type="obstacle_table"),
+            MapObstacle(x=8, y=5, type="obstacle_table"),
+        ]
     ),
     "minimal_cafe": MapTemplate(
         id="minimal_cafe",

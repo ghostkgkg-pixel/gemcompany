@@ -39,6 +39,9 @@ export class MainScene extends Phaser.Scene {
 
     // INTERACTIVE MAP EDITOR: Click to toggle obstacle
     interactiveBg.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
+        const { currentMap, buildMode, selectedTool } = useGameStore.getState();
+        if (!buildMode) return;
+
         // Adjust pointer coordinates relative to mapContainer
         const mapX = pointer.x - this.mapContainer.x;
         const mapY = pointer.y - this.mapContainer.y;
@@ -46,15 +49,16 @@ export class MainScene extends Phaser.Scene {
         const x = Math.floor(mapX / this.gridSize);
         const y = Math.floor(mapY / this.gridSize);
         
-        console.log(`Clicked on map cell: ${x}, ${y}`);
-        
-        const { currentMap } = useGameStore.getState();
         if (currentMap && x >= 0 && x < currentMap.width && y >= 0 && y < currentMap.height) {
             try {
-                const { toggleObstacle } = await import('../services/api');
-                await toggleObstacle(x, y);
+                const { placeObstacle, removeObstacle } = await import('../services/api');
+                if (selectedTool === 'eraser') {
+                    await removeObstacle(x, y);
+                } else {
+                    await placeObstacle(x, y, selectedTool);
+                }
             } catch (error) {
-                console.error("Failed to toggle obstacle:", error);
+                console.error("Failed to update obstacle:", error);
             }
         }
     });
@@ -132,29 +136,16 @@ export class MainScene extends Phaser.Scene {
             }
         }
 
-        // Draw Obstacles (Furniture) using Multiply BlendMode
+        // Draw Obstacles (Furniture)
         if (data.obstacles && data.obstacles.length > 0) {
             data.obstacles.forEach((obs: any) => {
-                const i = obs[0];
-                const j = obs[1];
-                
-                let zoneAlias = 'work';
-                if (data.zones) {
-                    const zone = data.zones.find((z:any) => i >= z.x1 && i <= z.x2 && j >= z.y1 && j <= z.y2);
-                    if (zone) {
-                        if (zone.aliases.includes('회의실')) zoneAlias = 'meeting';
-                        else if (zone.aliases.includes('휴게실')) zoneAlias = 'break';
-                    }
-                }
-                
-                let obsKey = 'obstacle_desk';
-                if (zoneAlias === 'meeting') obsKey = 'obstacle_table';
-                if (zoneAlias === 'break') obsKey = 'obstacle_plant';
+                const i = obs.x;
+                const j = obs.y;
+                const obsKey = obs.type || 'obstacle_desk';
                 
                 const tile = this.add.image(i * this.gridSize, j * this.gridSize, obsKey)
                     .setOrigin(0, 0)
-                    .setDisplaySize(this.gridSize, this.gridSize)
-                    .setBlendMode(Phaser.BlendModes.MULTIPLY); // Makes pure white background transparent
+                    .setDisplaySize(this.gridSize, this.gridSize);
                 this.mapContainer.add(tile);
             });
         }
@@ -231,7 +222,6 @@ export class MainScene extends Phaser.Scene {
         const body = this.add.sprite(0, 0, spriteKey);
         const spriteSize = Math.max(24, Math.floor(gridSize * 0.9));
         body.setDisplaySize(spriteSize, spriteSize);
-        body.setBlendMode(Phaser.BlendModes.MULTIPLY); // Make white bg transparent
         
         // Name Label
         const label = this.add.text(0, 35, data.name, { 
