@@ -26,3 +26,8 @@ export const chatWithAgent = async (agentId: string, message: string) => {
   const response = await axios.post(`${API_BASE}/agents/${agentId}/chat?message=${encodeURIComponent(message)}`);
   return response.data;
 };
+
+export const toggleObstacle = async (x: number, y: number) => {
+  const response = await axios.post(`${API_BASE}/map/obstacles/toggle`, null, { params: { x, y } });
+  return response.data;
+};

@@ -156,6 +156,24 @@ async def move_agent(agent_id: str, x: int, y: int):
     agents[agent_id].current_action = f"Moving to ({x}, {y})"
     return {"message": "Movement started", "target": (x, y)}
 
+@app.post("/map/obstacles/toggle")
+async def toggle_obstacle(x: int, y: int):
+    global current_map
+    m = current_map or MAP_TEMPLATES["standard_office"]
+    
+    # Check if obstacle exists
+    obs = [x, y]
+    if obs in m.obstacles:
+        m.obstacles.remove(obs)
+        action = "removed"
+    else:
+        m.obstacles.append(obs)
+        action = "added"
+    
+    current_map = m
+    await broadcast_map(current_map.dict())
+    return {"message": f"Obstacle {action} at ({x}, {y})", "obstacles": m.obstacles}
+
 # Default Templates
 MAP_TEMPLATES = {
     "standard_office": MapTemplate(

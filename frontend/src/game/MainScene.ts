@@ -16,8 +16,12 @@ export class MainScene extends Phaser.Scene {
     this.load.image('agent', 'assets/agent.png');
   }
 
-  create() {
-    this.renderMap();
+    create() {
+    this.mapContainer = this.add.container(0, 0);
+
+    // Initial Render
+    const { currentMap } = useGameStore.getState();
+    if (currentMap) this.syncMap(currentMap);
     
     // Subscribe to store for agent updates safely
     this.unsubscribe = useGameStore.subscribe(
@@ -32,12 +36,32 @@ export class MainScene extends Phaser.Scene {
     // Also subscribe to map updates
     useGameStore.subscribe(
       (state) => state.currentMap,
-      () => {
-        if (this.scene && this.sys) {
-          this.renderMap();
+      (newMap) => {
+        if (this.scene && this.sys && newMap) {
+          this.syncMap(newMap);
         }
       }
     );
+
+    // INTERACTIVE MAP EDITOR: Click to toggle obstacle
+    this.input.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
+        const x = Math.floor(pointer.x / this.gridSize);
+        const y = Math.floor(pointer.y / this.gridSize);
+        
+        console.log(`Clicked on map cell: ${x}, ${y}`);
+        
+        // Prevent out of bounds
+        const { currentMap } = useGameStore.getState();
+        if (currentMap && x >= 0 && x < currentMap.width && y >= 0 && y < currentMap.height) {
+            try {
+                // Call API directly
+                const { toggleObstacle } = await import('../services/api');
+                await toggleObstacle(x, y);
+            } catch (error) {
+                console.error("Failed to toggle obstacle:", error);
+            }
+        }
+    });
 
     // Cleanup when scene is shut down
     this.events.on('shutdown', () => {
@@ -62,19 +86,18 @@ export class MainScene extends Phaser.Scene {
             this.mapContainer.add(rect);
         });
 
-        // DRAW DIRECTLY ON SCENE (NOT CONTAINER) FOR DEBUGGING
-        if (data.obstacles) {
-            data.obstacles.forEach((obs: any, index: number) => {
+        // Draw Obstacles (Walls/Furniture) - FORCED VISIBILITY
+        if (data.obstacles && data.obstacles.length > 0) {
+            console.log("Drawing Obstacles on Canvas:", data.obstacles);
+            data.obstacles.forEach((obs: any) => {
                 const x = obs[0] * this.gridSize;
                 const y = obs[1] * this.gridSize;
                 
-                console.log(`Actually drawing obstacle ${index} at ${x}, ${y}`);
-                
-                // Huge Red Square to ensure visibility
-                this.add.rectangle(x, y, 38, 38, 0xff0000, 1.0)
+                // Sleek Dark Blocks for the final look
+                const rect = this.add.rectangle(x, y, this.gridSize, this.gridSize, 0x1e293b, 1.0)
                     .setOrigin(0, 0)
-                    .setDepth(2000) // Extremely high depth
-                    .setStrokeStyle(4, 0xffff00); // Yellow border
+                    .setStrokeStyle(1, 0x000000);
+                this.mapContainer.add(rect);
             });
         }
 
@@ -166,38 +189,7 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  private renderMap() {
-    const { currentMap } = useGameStore.getState();
-    if (!currentMap) return;
-
-    // Clear existing zones
-    this.zones.forEach(z => z.destroy());
-    this.zones = [];
-
-    const gridSize = 40; // Pixels per grid unit
-
-    currentMap.zones.forEach((zone: any) => {
-      const g = this.add.graphics();
-      const color = parseInt(zone.color.replace('#', '0x'), 16);
-      g.fillStyle(color, 0.5);
-      
-      const width = (zone.x2 - zone.x1 + 1) * gridSize;
-      const height = (zone.y2 - zone.y1 + 1) * gridSize;
-      
-      g.fillRect(zone.x1 * gridSize, zone.y1 * gridSize, width, height);
-      g.lineStyle(2, color, 1);
-      g.strokeRect(zone.x1 * gridSize, zone.y1 * gridSize, width, height);
-
-      this.add.text(
-        zone.x1 * gridSize + 5, 
-        zone.y1 * gridSize + 5, 
-        zone.name, 
-        { fontSize: '12px', color: '#000000' }
-      );
-      
-      this.zones.push(g);
-    });
-  }
+    // Remove old renderMap to avoid confusion. syncMap is the true path.
 
   update() {
     // Game loop
