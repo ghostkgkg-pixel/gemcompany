@@ -14,9 +14,12 @@ export const GameCanvas = () => {
       console.log("Initializing Phaser Game...");
       const config: Phaser.Types.Core.GameConfig = {
         type: Phaser.CANVAS, // Force CANVAS to avoid WebGL context issues in some environments
-        width: 800,
-        height: 600,
-        parent: containerRef.current,
+        scale: {
+          mode: Phaser.Scale.RESIZE,
+          parent: containerRef.current,
+          width: '100%',
+          height: '100%'
+        },
         backgroundColor: '#ffffff',
         scene: [MainScene],
         physics: {

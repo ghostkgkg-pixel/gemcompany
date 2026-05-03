@@ -13,7 +13,7 @@ export class MainScene extends Phaser.Scene {
   private unsubscribe: (() => void) | null = null;
   
   private mapContainer!: Phaser.GameObjects.Container;
-  private gridSize: number = 40;
+  private gridSize: number = 70; // Increased from 40 to 70 for a much larger map
 
   preload() {
     this.load.image('agent', 'assets/agent.png');
@@ -23,7 +23,7 @@ export class MainScene extends Phaser.Scene {
     this.mapContainer = this.add.container(0, 0);
 
     // Create a transparent interactive background for reliable click detection
-    const interactiveBg = this.add.rectangle(0, 0, 800, 800, 0x000000, 0)
+    const interactiveBg = this.add.rectangle(0, 0, 2000, 2000, 0x000000, 0)
         .setOrigin(0, 0)
         .setInteractive();
 
@@ -77,7 +77,7 @@ export class MainScene extends Phaser.Scene {
 
     private syncMap(data: any) {
         this.mapContainer.removeAll(true);
-        this.gridSize = 40;
+        this.gridSize = 70; // Update grid size here too
 
         // Draw Zones with colors, borders, and labels
         data.zones.forEach((zone: any) => {
@@ -135,7 +135,7 @@ export class MainScene extends Phaser.Scene {
     }
 
   private syncAgents(agents: Record<string, any>) {
-    const gridSize = 40;
+    const gridSize = 70; // Update local grid size for agents
 
     // Remove agents that are no longer in the store
     for (const [id, spriteData] of this.agentSprites.entries()) {
@@ -157,10 +157,10 @@ export class MainScene extends Phaser.Scene {
         
         // Body (Sprite)
         const body = this.add.sprite(0, 0, 'agent');
-        body.setDisplaySize(32, 32);
+        body.setDisplaySize(56, 56); // Scaled up for larger grid
         
         // Name Label
-        const label = this.add.text(0, 25, data.name, { 
+        const label = this.add.text(0, 35, data.name, { 
           fontFamily: 'NeoDunggeunmo',
           fontSize: '12px', 
           color: '#ffffff',
