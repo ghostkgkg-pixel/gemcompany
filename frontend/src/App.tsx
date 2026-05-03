@@ -1,9 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import { GameCanvas } from './components/GameCanvas';
 import { useGameStore } from './store/useGameStore';
-import { getMapCurrent, spawnAgent, moveAgent } from './services/api';
+import { getMapCurrent, spawnAgent, moveAgent, chatWithAgent } from './services/api';
 import { initSocket } from './services/socket';
-import { Users, Map as MapIcon, Terminal, Plus, Loader2, Navigation } from 'lucide-react';
+import { Users, Map as MapIcon, Terminal, Plus, Loader2, Navigation, MessageCircle } from 'lucide-react';
 import axios from 'axios';
 
 function App() {
@@ -20,6 +20,9 @@ function App() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [templates, setTemplates] = useState<any>(null); // Start with null to detect loading
   const [error, setError] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [chatMessage, setChatMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -91,6 +94,19 @@ function App() {
     }
   };
 
+  const handleChat = async () => {
+    if (!selectedAgentId || !chatMessage.trim()) return;
+    setIsSending(true);
+    try {
+      await chatWithAgent(selectedAgentId, chatMessage);
+      setChatMessage('');
+    } catch (error) {
+      console.error("Chat failed:", error);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   return (
     <div className="w-full h-screen bg-slate-900 text-white flex overflow-hidden fixed inset-0">
       {/* Sidebar */}
@@ -128,12 +144,16 @@ function App() {
           </div>
           <div className="flex flex-col gap-3">
             {agents.map((agent: any) => (
-              <div key={agent?.id} className="bg-slate-700/40 border border-slate-600/50 p-3 rounded-xl hover:border-indigo-500/50 transition-all group">
+              <div 
+                key={agent?.id} 
+                onClick={() => setSelectedAgentId(agent?.id)}
+                className={`bg-slate-700/40 border p-3 rounded-xl hover:border-indigo-500/50 transition-all group cursor-pointer ${selectedAgentId === agent?.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-600/50'}`}
+              >
                 <div className="flex justify-between items-start">
                   <div className="font-bold text-indigo-300 truncate pr-2">{agent?.name}</div>
                   <div className="flex gap-2">
                     <button 
-                      onClick={() => handleMove(agent?.id)}
+                      onClick={(e) => { e.stopPropagation(); handleMove(agent?.id); }}
                       className="text-xs bg-slate-600 hover:bg-indigo-500 text-white p-1 rounded transition-colors"
                       title="Move to random location"
                     >
@@ -150,6 +170,29 @@ function App() {
             ))}
           </div>
         </section>
+
+        {/* Chat Section */}
+        {selectedAgentId && (
+          <section className="bg-slate-900/50 p-4 rounded-xl border border-indigo-500/30 shadow-inner mt-auto">
+            <h3 className="text-xs font-semibold text-indigo-400 uppercase mb-3 flex items-center gap-2">
+              <MessageCircle size={14} /> Chat with {agentsObj[selectedAgentId]?.name}
+            </h3>
+            <input 
+              value={chatMessage}
+              onChange={(e) => setChatMessage(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleChat()}
+              placeholder="Send message..."
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-white"
+            />
+            <button 
+              onClick={handleChat}
+              disabled={isSending || !chatMessage.trim()}
+              className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all"
+            >
+              {isSending ? <Loader2 className="animate-spin" size={14} /> : <span>Send to Agent</span>}
+            </button>
+          </section>
+        )}
       </aside>
 
       {/* Main Content */}

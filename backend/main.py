@@ -220,6 +220,47 @@ async def spawn_agent(description: str):
 async def list_agents():
     return list(agents.values())
 
+@app.post("/agents/{agent_id}/chat")
+async def chat_with_agent(agent_id: str, message: str):
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    agent = agents[agent_id]
+    connector = GeminiConnector()
+    
+    # System prompt to ensure JSON response for the simulation
+    prompt = f"""
+    ROLE: You are an AI agent in a 2D virtual office simulation.
+    PERSONA: {agent.persona}
+    CONTEXT: You are at ({agent.x}, {agent.y}) in the office.
+    
+    USER MESSAGE: "{message}"
+    
+    INSTRUCTION: Respond to the user's message while staying in character. 
+    You must provide your internal thought process and your external speech.
+    
+    RESPONSE FORMAT (JSON ONLY):
+    {{
+        "thought": "short internal reasoning about the message",
+        "speech": "your spoken response to the user",
+        "action": "current status or immediate intended action (e.g. 'Thinking', 'Greeting user')"
+    }}
+    """
+    
+    try:
+        # Use the connector to get a JSON response from gemini-cli
+        response_data = connector.send_prompt_json(prompt)
+        
+        agent.current_thought = response_data.get("thought", "...")
+        agent.current_speech = response_data.get("speech", "Hello!")
+        agent.current_action = response_data.get("action", agent.current_action)
+        
+        await broadcast_agents()
+        return agent
+    except Exception as e:
+        print(f"Error in chat_with_agent: {e}")
+        raise HTTPException(status_code=500, detail=f"Engine Error: {str(e)}")
+
 @app.get("/")
 async def root():
     return {"status": "AI Agent Office Engine Running", "phase": 4}
