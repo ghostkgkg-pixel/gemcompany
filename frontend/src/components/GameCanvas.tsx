@@ -49,12 +49,11 @@ export const GameCanvas = () => {
   }, []);
 
   return (
-    <div className="p-1 bg-slate-700 rounded-lg shadow-2xl inline-block overflow-hidden">
+    <div className="w-full h-full">
       <div 
         ref={containerRef} 
         id="phaser-game-container"
-        className="bg-white" 
-        style={{ width: '800px', height: '600px' }}
+        className="w-full h-full bg-white" 
       />
     </div>
   );
