@@ -40,8 +40,8 @@ class GeminiConnector:
             raise e
 
     def send_prompt(self, prompt: str) -> str:
-        # Use -p for non-interactive mode and -m for lighter/faster model
-        stdout = self._execute(["-m", "gemini-3.0-flash", "-p", prompt])
+        # Use -p for non-interactive mode
+        stdout = self._execute(["-p", prompt])
         # Clean up output - remove common agent warnings if they leaked to stdout
         # We use regex to remove them surgically as they might be on the same line as the response
         markers = [
@@ -56,7 +56,7 @@ class GeminiConnector:
         return clean_stdout.strip()
 
     def send_prompt_json(self, prompt: str) -> dict:
-        stdout = self._execute(["-m", "gemini-3.0-flash", "-p", prompt])
+        stdout = self._execute(["-p", prompt])
         # Find JSON block
         json_match = re.search(r'(\{.*\}|\[.*\])', stdout, re.DOTALL)
         if json_match:
