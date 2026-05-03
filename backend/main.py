@@ -91,6 +91,7 @@ class Agent(BaseModel):
     current_action: str
     current_thought: str
     current_speech: str
+    appearance: Dict = {} # {body: 'body_light', hair: 'hair_black_short', outfit: 'agent_dev'}
 
 # --- In-memory Storage ---
 agents: Dict[str, Agent] = {}
@@ -369,6 +370,18 @@ async def spawn_agent(description: str):
     persona_data = pm.analyze_persona(description)
     
     agent_id = str(uuid.uuid4())[:8]
+    # Randomly assign appearance for diversity
+    import random
+    bodies = ["body_light", "body_tan", "body_dark"]
+    hairs = ["hair_black_short", "hair_brown_long", "none"]
+    outfits = ["agent_dev", "agent_design", "agent_manage", "agent_market"]
+    
+    appearance = {
+        "body": random.choice(bodies),
+        "hair": random.choice(hairs),
+        "outfit": random.choice(outfits)
+    }
+
     new_agent = Agent(
         id=agent_id,
         name=persona_data.get("Name", f"Agent_{agent_id}"),
@@ -377,7 +390,8 @@ async def spawn_agent(description: str):
         x=5, y=5,
         current_action="Idle",
         current_thought="Just arrived at the office.",
-        current_speech="Hello everyone!"
+        current_speech="Hello everyone!",
+        appearance=appearance
     )
     agents[agent_id] = new_agent
     await broadcast_agents()

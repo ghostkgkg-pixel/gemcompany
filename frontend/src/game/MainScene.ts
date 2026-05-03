@@ -24,6 +24,12 @@ export class MainScene extends Phaser.Scene {
     this.load.image('agent_design', 'assets/agent_design.png');
     this.load.image('agent_manage', 'assets/agent_manage.png');
     this.load.image('agent_market', 'assets/agent_market.png');
+
+    this.load.image('body_light', 'assets/body_light.png');
+    this.load.image('body_tan', 'assets/body_tan.png');
+    this.load.image('body_dark', 'assets/body_dark.png');
+    this.load.image('hair_black_short', 'assets/hair_black_short.png');
+    this.load.image('hair_brown_long', 'assets/hair_brown_long.png');
     
     // Fallback original agent
     this.load.image('agent', 'assets/agent.png');
@@ -143,9 +149,9 @@ export class MainScene extends Phaser.Scene {
                 const j = obs.y;
                 const obsKey = obs.type || 'obstacle_desk';
                 
-                const tile = this.add.image(i * this.gridSize, j * this.gridSize, obsKey)
-                    .setOrigin(0, 0)
-                    .setDisplaySize(this.gridSize, this.gridSize);
+                const tile = this.add.image(i * this.gridSize + this.gridSize/2, j * this.gridSize + this.gridSize/2, obsKey)
+                    .setOrigin(0.5, 0.5)
+                    .setDisplaySize(this.gridSize * 0.7, this.gridSize * 0.7);
                 this.mapContainer.add(tile);
             });
         }
@@ -211,17 +217,22 @@ export class MainScene extends Phaser.Scene {
         // Create new agent container
         const container = this.add.container(targetX, targetY);
         
-        // Determine sprite based on role
-        let spriteKey = 'agent_manage'; // default
-        const role = (data.persona?.Role || '').toLowerCase();
-        if (role.includes('개발') || role.includes('dev')) spriteKey = 'agent_dev';
-        else if (role.includes('디자인') || role.includes('design')) spriteKey = 'agent_design';
-        else if (role.includes('마케') || role.includes('market')) spriteKey = 'agent_market';
+        // Layered Appearance
+        const app = data.appearance || {};
+        const bodyPart = app.body || 'body_light';
+        const outfitPart = app.outfit || 'agent_dev';
+        const hairPart = app.hair || 'none';
+
+        const spriteSize = Math.floor(gridSize * 1.3);
+
+        const bodySprite = this.add.sprite(0, 0, bodyPart).setDisplaySize(spriteSize, spriteSize);
+        const outfitSprite = this.add.sprite(0, 0, outfitPart).setDisplaySize(spriteSize, spriteSize);
+        const hairSprite = hairPart !== 'none' ? this.add.sprite(0, 0, hairPart).setDisplaySize(spriteSize, spriteSize) : null;
         
-        // Body (Sprite)
-        const body = this.add.sprite(0, 0, spriteKey);
-        const spriteSize = Math.max(24, Math.floor(gridSize * 0.9));
-        body.setDisplaySize(spriteSize, spriteSize);
+        // Add all to container
+        const spriteLayers = [bodySprite, outfitSprite];
+        if (hairSprite) spriteLayers.push(hairSprite);
+
         
         // Name Label
         const label = this.add.text(0, 35, data.name, { 
@@ -246,8 +257,8 @@ export class MainScene extends Phaser.Scene {
         // Add retro border to bubble
         bubble.setStroke('#000000', 3);
         
-        container.add([body, label, bubble]);
-        this.agentSprites.set(id, { container, body, label, bubble });
+        container.add([...spriteLayers, label, bubble]);
+        this.agentSprites.set(id, { container, body: bodySprite, label, bubble } as any);
       } else {
         // Update existing agent
         const spriteData = this.agentSprites.get(id)!;

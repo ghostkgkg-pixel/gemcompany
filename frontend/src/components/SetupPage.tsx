@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { spawnAgent } from '../services/api';
 import { useGameStore } from '../store/useGameStore';
-import { Plus, Map as MapIcon, Users, Building, Play } from 'lucide-react';
+import { Plus, Map as MapIcon, Users, Building, Play, Hammer, Eraser, X } from 'lucide-react';
+import { GameCanvas } from './GameCanvas';
 
 interface SetupPageProps {
   onStart: () => void;
@@ -13,8 +14,14 @@ export function SetupPage({ onStart }: SetupPageProps) {
   const [isSpawning, setIsSpawning] = useState(false);
   const [templates, setTemplates] = useState<any>(null);
   
+  const [isEditingMap, setIsEditingMap] = useState(false);
+  
   const currentMap = useGameStore((state) => state.currentMap);
   const agentsObj = useGameStore((state) => state.agents);
+  const buildMode = useGameStore((state: any) => state.buildMode);
+  const toggleBuildMode = useGameStore((state: any) => state.toggleBuildMode);
+  const selectedTool = useGameStore((state: any) => state.selectedTool);
+  const setSelectedTool = useGameStore((state: any) => state.setSelectedTool);
   const agents = Object.values(agentsObj || {});
 
   useEffect(() => {
@@ -70,6 +77,14 @@ export function SetupPage({ onStart }: SetupPageProps) {
               <MapIcon /> 1. 사무실(맵) 구조 선택
             </h2>
             <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => { setIsEditingMap(true); if(!buildMode) toggleBuildMode(); }}
+                className="w-full py-4 border-2 border-black bg-yellow-400 hover:bg-yellow-500 font-bold text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none mb-2 flex items-center justify-center gap-2"
+              >
+                <Hammer /> 맵 편집기 열기 (가구 배치)
+              </button>
+              
+              <div className="text-sm font-bold mb-2">기본 템플릿:</div>
               {templates ? (
                 Object.entries(templates).map(([id, t]: [string, any]) => (
                   <button 
@@ -81,7 +96,7 @@ export function SetupPage({ onStart }: SetupPageProps) {
                         : 'bg-white hover:bg-gray-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1'
                     }`}
                   >
-                    {t.name} {currentMap?.name === t.name && '(현재 선택됨)'}
+                    {t.name}
                   </button>
                 ))
               ) : (
@@ -144,6 +159,72 @@ export function SetupPage({ onStart }: SetupPageProps) {
         </div>
 
       </div>
+      {/* Map Editor Overlay */}
+      {isEditingMap && (
+        <div className="fixed inset-0 z-50 bg-[#86efac] flex flex-col p-4 animate-in fade-in duration-300">
+          <div className="bg-white border-4 border-black p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mb-4 flex justify-between items-center">
+            <h2 className="text-3xl font-bold flex items-center gap-2">
+              <Hammer /> 오피스 맵 편집기
+            </h2>
+            <button 
+              onClick={() => { setIsEditingMap(false); if(buildMode) toggleBuildMode(); }}
+              className="bg-red-400 border-2 border-black p-2 hover:bg-red-500 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none text-white"
+            >
+              <X size={32} />
+            </button>
+          </div>
+          
+          <div className="flex-1 flex gap-4 overflow-hidden">
+            {/* Editor Sidebar */}
+            <aside className="w-64 bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-4 flex flex-col gap-4 overflow-y-auto">
+              <h3 className="font-bold border-b-2 border-black pb-2 flex items-center gap-2 uppercase tracking-tighter">
+                가구 선택
+              </h3>
+              
+              <div className="grid grid-cols-1 gap-4">
+                {[
+                  { id: 'obstacle_desk', name: '업무용 책상', img: 'assets/obstacle_desk.png' },
+                  { id: 'obstacle_table', name: '회의용 테이블', img: 'assets/obstacle_table.png' },
+                  { id: 'obstacle_plant', name: '인테리어 화분', img: 'assets/obstacle_plant.png' },
+                ].map(item => (
+                  <button 
+                    key={item.id}
+                    onClick={() => setSelectedTool(item.id)}
+                    className={`p-3 border-2 border-black flex flex-col items-center gap-2 transition-all ${
+                      selectedTool === item.id ? 'bg-blue-100 ring-2 ring-blue-500' : 'bg-gray-50'
+                    }`}
+                  >
+                    <img src={item.img} alt={item.name} className="w-12 h-12 object-contain pixelated" />
+                    <span className="text-xs font-bold">{item.name}</span>
+                  </button>
+                ))}
+                
+                <button 
+                  onClick={() => setSelectedTool('eraser')}
+                  className={`p-3 border-2 border-black flex flex-col items-center gap-2 transition-all ${
+                    selectedTool === 'eraser' ? 'bg-red-100 ring-2 ring-red-500' : 'bg-gray-50'
+                  }`}
+                >
+                  <div className="w-12 h-12 flex items-center justify-center text-red-500">
+                    <Eraser size={32} />
+                  </div>
+                  <span className="text-xs font-bold text-red-600">지우개 (철거)</span>
+                </button>
+              </div>
+              
+              <div className="mt-auto bg-blue-50 p-3 border-2 border-black text-[10px] leading-tight font-bold">
+                * 맵 위를 클릭하면 가구가 배치됩니다.<br/>
+                * 지우개로 기존 가구를 지울 수 있습니다.
+              </div>
+            </aside>
+            
+            {/* Editor Canvas */}
+            <main className="flex-1 bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
+               <GameCanvas />
+            </main>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
