@@ -22,6 +22,29 @@ export class MainScene extends Phaser.Scene {
     create() {
     this.mapContainer = this.add.container(0, 0);
 
+    // Create a transparent interactive background for reliable click detection
+    const interactiveBg = this.add.rectangle(0, 0, 800, 800, 0x000000, 0)
+        .setOrigin(0, 0)
+        .setInteractive();
+
+    // INTERACTIVE MAP EDITOR: Click to toggle obstacle
+    interactiveBg.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
+        const x = Math.floor(pointer.x / this.gridSize);
+        const y = Math.floor(pointer.y / this.gridSize);
+        
+        console.log(`Clicked on map cell: ${x}, ${y}`);
+        
+        const { currentMap } = useGameStore.getState();
+        if (currentMap && x >= 0 && x < currentMap.width && y >= 0 && y < currentMap.height) {
+            try {
+                const { toggleObstacle } = await import('../services/api');
+                await toggleObstacle(x, y);
+            } catch (error) {
+                console.error("Failed to toggle obstacle:", error);
+            }
+        }
+    });
+
     // Initial Render
     const { currentMap } = useGameStore.getState();
     if (currentMap) this.syncMap(currentMap);
@@ -46,26 +69,6 @@ export class MainScene extends Phaser.Scene {
       }
     );
 
-    // INTERACTIVE MAP EDITOR: Click to toggle obstacle
-    this.input.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
-        const x = Math.floor(pointer.x / this.gridSize);
-        const y = Math.floor(pointer.y / this.gridSize);
-        
-        console.log(`Clicked on map cell: ${x}, ${y}`);
-        
-        // Prevent out of bounds
-        const { currentMap } = useGameStore.getState();
-        if (currentMap && x >= 0 && x < currentMap.width && y >= 0 && y < currentMap.height) {
-            try {
-                // Call API directly
-                const { toggleObstacle } = await import('../services/api');
-                await toggleObstacle(x, y);
-            } catch (error) {
-                console.error("Failed to toggle obstacle:", error);
-            }
-        }
-    });
-
     // Cleanup when scene is shut down
     this.events.on('shutdown', () => {
       if (this.unsubscribe) this.unsubscribe();
@@ -73,25 +76,37 @@ export class MainScene extends Phaser.Scene {
   }
 
     private syncMap(data: any) {
-        console.log("CRITICAL DEBUG - Map Data:", data);
         this.mapContainer.removeAll(true);
         this.gridSize = 40;
 
-        // Draw Zones
+        // Draw Zones with colors, borders, and labels
         data.zones.forEach((zone: any) => {
             const width = (zone.x2 - zone.x1 + 1) * this.gridSize;
             const height = (zone.y2 - zone.y1 + 1) * this.gridSize;
             const x = zone.x1 * this.gridSize;
             const y = zone.y1 * this.gridSize;
 
-            const rect = this.add.rectangle(x, y, width, height, Phaser.Display.Color.HexStringToColor(zone.color).color, 0.3)
-                .setOrigin(0, 0);
+            const color = Phaser.Display.Color.HexStringToColor(zone.color).color;
+            
+            // Fill
+            const rect = this.add.rectangle(x, y, width, height, color, 0.4)
+                .setOrigin(0, 0)
+                .setStrokeStyle(2, color, 1.0); // Restored border
             this.mapContainer.add(rect);
+
+            // Restored Label
+            const text = this.add.text(x + 8, y + 8, zone.name, { 
+                fontSize: '14px', 
+                color: '#333333', 
+                fontStyle: 'bold',
+                backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                padding: { x: 4, y: 2 }
+            });
+            this.mapContainer.add(text);
         });
 
         // Draw Obstacles (Walls/Furniture) - FORCED VISIBILITY
         if (data.obstacles && data.obstacles.length > 0) {
-            console.log("Drawing Obstacles on Canvas:", data.obstacles);
             data.obstacles.forEach((obs: any) => {
                 const x = obs[0] * this.gridSize;
                 const y = obs[1] * this.gridSize;
@@ -99,14 +114,14 @@ export class MainScene extends Phaser.Scene {
                 // Sleek Dark Blocks for the final look
                 const rect = this.add.rectangle(x, y, this.gridSize, this.gridSize, 0x1e293b, 1.0)
                     .setOrigin(0, 0)
-                    .setStrokeStyle(1, 0x000000);
+                    .setStrokeStyle(2, 0xffffff);
                 this.mapContainer.add(rect);
             });
         }
 
         // Grid lines at the end
         const graphics = this.add.graphics();
-        graphics.lineStyle(1, 0x000000, 0.2);
+        graphics.lineStyle(1, 0x000000, 0.1);
         for (let i = 0; i <= data.width; i++) {
             graphics.moveTo(i * this.gridSize, 0);
             graphics.lineTo(i * this.gridSize, data.height * this.gridSize);
