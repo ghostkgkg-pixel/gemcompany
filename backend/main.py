@@ -116,8 +116,16 @@ async def world_tick_loop():
                     changed = True
                     continue
 
+                # Check if current path is invalidated by new obstacles
+                path_invalid = False
+                if agent.path:
+                    for p in agent.path:
+                        if p in m.obstacles:
+                            path_invalid = True
+                            break
+
                 # Recalculate path if needed
-                if not agent.path or tuple(agent.path[-1]) != target:
+                if not agent.path or tuple(agent.path[-1]) != target or path_invalid:
                     new_path = astar.find_path(current, target)
                     if new_path:
                         agent.path = [list(p) for p in new_path]
@@ -244,7 +252,7 @@ async def spawn_agent(description: str):
     persona_data = pm.analyze_persona(description)
     
     agent_id = str(uuid.uuid4())[:8]
-    new_agent = AgentStatus(
+    new_agent = Agent(
         id=agent_id,
         name=persona_data.get("Name", f"Agent_{agent_id}"),
         persona=persona_data,
