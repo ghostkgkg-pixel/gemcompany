@@ -29,8 +29,12 @@ export class MainScene extends Phaser.Scene {
 
     // INTERACTIVE MAP EDITOR: Click to toggle obstacle
     interactiveBg.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
-        const x = Math.floor(pointer.x / this.gridSize);
-        const y = Math.floor(pointer.y / this.gridSize);
+        // Adjust pointer coordinates relative to mapContainer
+        const mapX = pointer.x - this.mapContainer.x;
+        const mapY = pointer.y - this.mapContainer.y;
+        
+        const x = Math.floor(mapX / this.gridSize);
+        const y = Math.floor(mapY / this.gridSize);
         
         console.log(`Clicked on map cell: ${x}, ${y}`);
         
@@ -77,7 +81,23 @@ export class MainScene extends Phaser.Scene {
 
     private syncMap(data: any) {
         this.mapContainer.removeAll(true);
-        this.gridSize = 40;
+        
+        // Dynamically calculate grid size to fit the screen while keeping squares
+        const canvasW = this.sys.game.canvas.width;
+        const canvasH = this.sys.game.canvas.height;
+        
+        // Calculate the maximum grid size that fits
+        const sizeX = Math.floor(canvasW / data.width);
+        const sizeY = Math.floor(canvasH / data.height);
+        this.gridSize = Math.min(sizeX, sizeY);
+        
+        // Center the map in the remaining space
+        const mapPixelWidth = data.width * this.gridSize;
+        const mapPixelHeight = data.height * this.gridSize;
+        const offsetX = Math.floor((canvasW - mapPixelWidth) / 2);
+        const offsetY = Math.floor((canvasH - mapPixelHeight) / 2);
+        
+        this.mapContainer.setPosition(offsetX, offsetY);
 
         // Draw Zones with colors, borders, and labels
         data.zones.forEach((zone: any) => {
@@ -132,10 +152,19 @@ export class MainScene extends Phaser.Scene {
             graphics.lineTo(data.width * this.gridSize, j * this.gridSize);
         }
         this.mapContainer.add(graphics);
+        
+        // Handle window resize dynamically
+        this.scale.on('resize', () => {
+            if (useGameStore.getState().currentMap) {
+                this.syncMap(useGameStore.getState().currentMap);
+                this.syncAgents(useGameStore.getState().agents);
+            }
+        });
     }
 
   private syncAgents(agents: Record<string, any>) {
-    const gridSize = 40;
+    // Keep agent grid size consistent with map
+    const gridSize = this.gridSize;
 
     // Remove agents that are no longer in the store
     for (const [id, spriteData] of this.agentSprites.entries()) {
@@ -157,7 +186,8 @@ export class MainScene extends Phaser.Scene {
         
         // Body (Sprite)
         const body = this.add.sprite(0, 0, 'agent');
-        body.setDisplaySize(32, 32);
+        const spriteSize = Math.max(24, Math.floor(gridSize * 0.9));
+        body.setDisplaySize(spriteSize, spriteSize);
         
         // Name Label
         const label = this.add.text(0, 35, data.name, { 

@@ -15,11 +15,10 @@ export const GameCanvas = () => {
       const config: Phaser.Types.Core.GameConfig = {
         type: Phaser.CANVAS, // Force CANVAS to avoid WebGL context issues in some environments
         scale: {
-          mode: Phaser.Scale.FIT,
-          autoCenter: Phaser.Scale.CENTER_BOTH,
+          mode: Phaser.Scale.RESIZE,
           parent: containerRef.current,
-          width: 800,
-          height: 600
+          width: '100%',
+          height: '100%'
         },
         backgroundColor: '#ffffff',
         scene: [MainScene],
