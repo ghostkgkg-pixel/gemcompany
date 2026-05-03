@@ -1,0 +1,83 @@
+[
+  {
+    "id": "f2d61bb7-fff1-4efd-aea0-d290652b1ffc",
+    "agent_id": "test_agent_05",
+    "text": "The secret password is 'BANANA'.",
+    "level": "Gold",
+    "timestamp": "2026-05-03T22:34:37.014669",
+    "is_summary": false,
+    "original_text": ""
+  },
+  {
+    "id": "5752df82-16c7-4404-a275-c445658e8e1d",
+    "agent_id": "test_agent_05",
+    "text": "Today's weather is sunny.",
+    "level": "Bronze",
+    "timestamp": "2026-05-03T22:34:37.117170",
+    "is_summary": false,
+    "original_text": ""
+  },
+  {
+    "id": "454df34b-75e1-4a64-87e1-743949108d6f",
+    "agent_id": "test_agent_05",
+    "text": "Lunch was delicious.",
+    "level": "Bronze",
+    "timestamp": "2026-05-03T22:34:37.220667",
+    "is_summary": false,
+    "original_text": ""
+  },
+  {
+    "id": "7a89d13c-f25f-4573-bed2-0b14b82496e2",
+    "agent_id": "test_agent_05",
+    "text": "Finished Phase 2 successfully.",
+    "level": "Bronze",
+    "timestamp": "2026-05-03T22:34:37.323168",
+    "is_summary": false,
+    "original_text": ""
+  },
+  {
+    "id": "57c2e99c-4b8e-436a-8d2d-459c6dad6fbd",
+    "agent_id": "test_agent_05",
+    "text": "The secret password is 'BANANA'.",
+    "level": "Gold",
+    "timestamp": "2026-05-04T03:23:55.392358",
+    "is_summary": false,
+    "original_text": ""
+  },
+  {
+    "id": "6ed97dd6-5523-4c48-863c-c591b9faf816",
+    "agent_id": "test_agent_05",
+    "text": "Today's weather is sunny.",
+    "level": "Bronze",
+    "timestamp": "2026-05-04T03:23:55.495358",
+    "is_summary": false,
+    "original_text": ""
+  },
+  {
+    "id": "33920e4c-467c-44f5-87e5-85b8433a127f",
+    "agent_id": "test_agent_05",
+    "text": "Lunch was delicious.",
+    "level": "Bronze",
+    "timestamp": "2026-05-04T03:23:55.597860",
+    "is_summary": false,
+    "original_text": ""
+  },
+  {
+    "id": "886d96c9-4e0c-4c5e-bbcb-a0091201b62e",
+    "agent_id": "test_agent_05",
+    "text": "Finished Phase 2 successfully.",
+    "level": "Bronze",
+    "timestamp": "2026-05-04T03:23:55.700859",
+    "is_summary": false,
+    "original_text": ""
+  },
+  {
+    "id": "0a62a121-63c2-4ee6-95d2-cdf4efc3e1a0",
+    "agent_id": "test_agent_06",
+    "text": "The AI Agent Office project aims to build an autonomous simulation using `gemini-cli`. It has progressed through Core Connector (Phase 1), Persona/Stat systems (Phase 2), and Hybrid RAG Memory (Phase 3). \n\nCurrently, **Phase 4 (Visualization)** is active: \n*   **Backend:** A FastAPI + Socket.io server (`backend/main.py`) manages map templates, agent spawning via `PersonaManager`, and a periodic movement engine. \n*   **Frontend:** A React + Phaser 3 integration (`frontend/src/game/MainScene.ts`) renders 2D grid-based maps and agent sprites with smooth tweened movement and speech bubbles, synced via a Zustand store. \n*   **Status:** Movement, map rendering, and real-time syncing are functional. Next steps include A* pathfinding and an interactive map editor.",
+    "level": "Silver",
+    "timestamp": "2026-05-04T03:28:40.879426",
+    "is_summary": true,
+    "original_text": "\n    User: Hello agent, how are you today? I am thinking about a very long conversation that we are having right now. \n    It is important that we discuss many things in detail because this dialogue needs to exceed the word threshold \n    for the summarization logic to trigger in our Phase 3 implementation.\n    Agent: I understand completely. To help reach that threshold, I will elaborate on my current status. \n    I am functioning with high efficiency, processing all inputs through my advanced neural layers. \n    Seoul is a beautiful city with many historical sites like Gyeongbokgung Palace and Bukchon Hanok Village. \n    We can talk about food, culture, technology, or anything else you'd like. \n    Historical sites are particularly interesting during the autumn season when the leaves change colors.\n    User: That sounds wonderful. Let's also talk about the economic impact of AI in the modern workplace. \n    It's a topic that requires a lot of words to explain fully, making it perfect for this test case.\n    Agent: Indeed, AI is transforming industries by automating repetitive tasks and providing deep insights through data analysis. \n    This leads to increased productivity but also requires workers to adapt to new technologies.\n    "
+  }
+]
