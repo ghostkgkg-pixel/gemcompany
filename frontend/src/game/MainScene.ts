@@ -12,8 +12,20 @@ export class MainScene extends Phaser.Scene {
   
   private mapContainer!: Phaser.GameObjects.Container;
   private gridSize: number = 40;
-
   preload() {
+    this.load.image('floor_work', 'assets/floor_work.png');
+    this.load.image('floor_meeting', 'assets/floor_meeting.png');
+    this.load.image('floor_break', 'assets/floor_break.png');
+    this.load.image('obstacle_desk', 'assets/obstacle_desk.png');
+    this.load.image('obstacle_table', 'assets/obstacle_table.png');
+    this.load.image('obstacle_plant', 'assets/obstacle_plant.png');
+    
+    this.load.image('agent_dev', 'assets/agent_dev.png');
+    this.load.image('agent_design', 'assets/agent_design.png');
+    this.load.image('agent_manage', 'assets/agent_manage.png');
+    this.load.image('agent_market', 'assets/agent_market.png');
+    
+    // Fallback original agent
     this.load.image('agent', 'assets/agent.png');
   }
 
@@ -97,46 +109,72 @@ export class MainScene extends Phaser.Scene {
         
         this.mapContainer.setPosition(offsetX, offsetY);
 
-        // Draw Zones with colors, borders, and labels
+        // Draw Floor Tiles dynamically based on zones
+        for (let i = 0; i < data.width; i++) {
+            for (let j = 0; j < data.height; j++) {
+                let zoneAlias = 'work';
+                if (data.zones) {
+                    const zone = data.zones.find((z:any) => i >= z.x1 && i <= z.x2 && j >= z.y1 && j <= z.y2);
+                    if (zone) {
+                        if (zone.aliases.includes('회의실')) zoneAlias = 'meeting';
+                        else if (zone.aliases.includes('휴게실')) zoneAlias = 'break';
+                    }
+                }
+                
+                let tileKey = 'floor_work';
+                if (zoneAlias === 'meeting') tileKey = 'floor_meeting';
+                if (zoneAlias === 'break') tileKey = 'floor_break';
+                
+                const tile = this.add.image(i * this.gridSize, j * this.gridSize, tileKey)
+                    .setOrigin(0, 0)
+                    .setDisplaySize(this.gridSize, this.gridSize);
+                this.mapContainer.add(tile);
+            }
+        }
+
+        // Draw Obstacles (Furniture) using Multiply BlendMode
+        if (data.obstacles && data.obstacles.length > 0) {
+            data.obstacles.forEach((obs: any) => {
+                const i = obs[0];
+                const j = obs[1];
+                
+                let zoneAlias = 'work';
+                if (data.zones) {
+                    const zone = data.zones.find((z:any) => i >= z.x1 && i <= z.x2 && j >= z.y1 && j <= z.y2);
+                    if (zone) {
+                        if (zone.aliases.includes('회의실')) zoneAlias = 'meeting';
+                        else if (zone.aliases.includes('휴게실')) zoneAlias = 'break';
+                    }
+                }
+                
+                let obsKey = 'obstacle_desk';
+                if (zoneAlias === 'meeting') obsKey = 'obstacle_table';
+                if (zoneAlias === 'break') obsKey = 'obstacle_plant';
+                
+                const tile = this.add.image(i * this.gridSize, j * this.gridSize, obsKey)
+                    .setOrigin(0, 0)
+                    .setDisplaySize(this.gridSize, this.gridSize)
+                    .setBlendMode(Phaser.BlendModes.MULTIPLY); // Makes pure white background transparent
+                this.mapContainer.add(tile);
+            });
+        }
+        
+        // Draw Zone Labels
         data.zones.forEach((zone: any) => {
-            const width = (zone.x2 - zone.x1 + 1) * this.gridSize;
-            const height = (zone.y2 - zone.y1 + 1) * this.gridSize;
             const x = zone.x1 * this.gridSize;
             const y = zone.y1 * this.gridSize;
-
-            const color = Phaser.Display.Color.HexStringToColor(zone.color).color;
             
-            // Fill
-            const rect = this.add.rectangle(x, y, width, height, color, 0.4)
-                .setOrigin(0, 0)
-                .setStrokeStyle(3, color, 1.0); // Thicker retro border
-            this.mapContainer.add(rect);
-
             // Restored Label with Pixel Font
             const text = this.add.text(x + 8, y + 8, zone.name, { 
                 fontFamily: 'NeoDunggeunmo',
                 fontSize: '18px', 
-                color: '#000000', 
-                backgroundColor: '#ffffff',
+                color: '#ffffff', 
+                backgroundColor: 'rgba(0,0,0,0.5)',
                 padding: { x: 4, y: 2 }
             });
             text.setStroke('#000000', 2);
             this.mapContainer.add(text);
         });
-
-        // Draw Obstacles (Walls/Furniture) - FORCED VISIBILITY
-        if (data.obstacles && data.obstacles.length > 0) {
-            data.obstacles.forEach((obs: any) => {
-                const x = obs[0] * this.gridSize;
-                const y = obs[1] * this.gridSize;
-                
-                // Solid black block for retro wall
-                const rect = this.add.rectangle(x, y, this.gridSize, this.gridSize, 0x374151, 1.0)
-                    .setOrigin(0, 0)
-                    .setStrokeStyle(2, 0x000000);
-                this.mapContainer.add(rect);
-            });
-        }
 
         // Grid lines at the end
         const graphics = this.add.graphics();
@@ -182,10 +220,18 @@ export class MainScene extends Phaser.Scene {
         // Create new agent container
         const container = this.add.container(targetX, targetY);
         
+        // Determine sprite based on role
+        let spriteKey = 'agent_manage'; // default
+        const role = (data.persona?.Role || '').toLowerCase();
+        if (role.includes('개발') || role.includes('dev')) spriteKey = 'agent_dev';
+        else if (role.includes('디자인') || role.includes('design')) spriteKey = 'agent_design';
+        else if (role.includes('마케') || role.includes('market')) spriteKey = 'agent_market';
+        
         // Body (Sprite)
-        const body = this.add.sprite(0, 0, 'agent');
+        const body = this.add.sprite(0, 0, spriteKey);
         const spriteSize = Math.max(24, Math.floor(gridSize * 0.9));
         body.setDisplaySize(spriteSize, spriteSize);
+        body.setBlendMode(Phaser.BlendModes.MULTIPLY); // Make white bg transparent
         
         // Name Label
         const label = this.add.text(0, 35, data.name, { 
