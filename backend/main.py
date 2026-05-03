@@ -31,7 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/", sio_app)
 
 @sio.event
 async def connect(sid, environ, auth=None):
@@ -227,4 +226,6 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Wrap FastAPI app with Socket.io ASGI app so both routes work
+    combined_app = socketio.ASGIApp(sio, other_asgi_app=app)
+    uvicorn.run(combined_app, host="0.0.0.0", port=8000)
