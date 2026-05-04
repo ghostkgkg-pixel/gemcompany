@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { GameCanvas } from './GameCanvas';
 import { useGameStore } from '../store/useGameStore';
 import { getMapCurrent, moveAgent, chatWithAgent } from '../services/api';
@@ -80,6 +80,12 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
     }
   };
 
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [agents]);
+
   return (
     <div className="w-full h-screen flex overflow-hidden fixed inset-0 font-['NeoDunggeunmo'] text-black p-4 gap-4">
       
@@ -118,8 +124,19 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
                 <div className="text-xs text-gray-700 truncate mb-1">
                   행동: {agent?.current_action}
                 </div>
+                {agent?.current_task?.status && (
+                  <div className="text-[10px] font-bold text-purple-600 mt-1">
+                    작업 상태: {agent.current_task.status}
+                  </div>
+                )}
+                {agent?.work_history && agent.work_history.length > 0 && (
+                  <div className="text-[9px] font-bold text-blue-500 mt-1 flex items-center gap-1">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                    작업 중 ({agent.work_history.length})
+                  </div>
+                )}
                 {agent?.current_speech && (
-                  <div className="text-xs bg-white border border-gray-400 p-1 italic text-gray-800 line-clamp-2">
+                  <div className="text-xs bg-white border border-gray-400 p-1 mt-2 italic text-gray-800 line-clamp-2">
                     "{agent.current_speech}"
                   </div>
                 )}
@@ -158,42 +175,89 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
            </div>
         </div>
 
-        {/* Chat / Command Panel */}
-        <section className="bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3 flex gap-3 h-32 z-10 relative">
-          <div className="flex-1 flex flex-col">
-            <div className="text-sm font-bold text-black mb-1 flex items-center gap-1">
-              <MessageCircle size={14} /> 
-              {selectedAgentId ? `${(agents.find((a:any) => a.id === selectedAgentId) as any)?.name || ''}에게 말걸기` : '직원을 선택하세요'}
-            </div>
-            <textarea
-              value={chatMessage}
-              onChange={(e) => setChatMessage(e.target.value)}
-              disabled={!selectedAgentId}
-              placeholder={selectedAgentId ? "메시지를 입력하세요..." : "대화할 직원을 왼쪽에서 클릭하세요."}
-              className="flex-1 w-full bg-gray-50 border-2 border-black p-2 text-sm focus:outline-none resize-none disabled:bg-gray-200"
-            />
-          </div>
-          <div className="flex flex-col gap-2 justify-end w-32">
-             <button 
-                onClick={handleChat}
-                disabled={!selectedAgentId || !chatMessage.trim() || isSending}
-                className="w-full bg-[#f87171] hover:bg-[#ef4444] disabled:opacity-50 py-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none font-bold text-white flex items-center justify-center gap-1"
-              >
-                {isSending ? <span className="animate-pulse">전송중..</span> : <span>말하기</span>}
-              </button>
-              <button 
-                onClick={() => selectedAgentId && handleMove(selectedAgentId)}
+        {/* Chat / Command Panel & Work Log */}
+        <div className="flex gap-4 h-48 z-10 relative">
+          <section className="flex-1 bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3 flex gap-3 overflow-hidden">
+            <div className="flex-1 flex flex-col">
+              <div className="text-sm font-bold text-black mb-1 flex items-center gap-1">
+                <MessageCircle size={14} /> 
+                {selectedAgentId ? `${(agents.find((a:any) => a.id === selectedAgentId) as any)?.name || ''}에게 말걸기` : '직원을 선택하세요'}
+              </div>
+              <textarea
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
                 disabled={!selectedAgentId}
-                className="w-full bg-[#4ade80] hover:bg-[#22c55e] disabled:opacity-50 py-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none font-bold text-white flex items-center justify-center gap-1"
-              >
-                <Navigation size={14} /> 랜덤이동
-              </button>
-          </div>
-        </section>
+                placeholder={selectedAgentId ? "메시지를 입력하세요..." : "대화할 직원을 왼쪽에서 클릭하세요."}
+                className="flex-1 w-full bg-gray-50 border-2 border-black p-2 text-sm focus:outline-none resize-none disabled:bg-gray-200"
+              />
+            </div>
+            <div className="flex flex-col gap-2 justify-end w-32">
+               <button 
+                  onClick={handleChat}
+                  disabled={!selectedAgentId || !chatMessage.trim() || isSending}
+                  className="w-full bg-[#f87171] hover:bg-[#ef4444] disabled:opacity-50 py-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none font-bold text-white flex items-center justify-center gap-1"
+                >
+                  {isSending ? <span className="animate-pulse">전송중..</span> : <span>말하기</span>}
+                </button>
+                <button 
+                  onClick={() => selectedAgentId && handleMove(selectedAgentId)}
+                  disabled={!selectedAgentId}
+                  className="w-full bg-[#4ade80] hover:bg-[#22c55e] disabled:opacity-50 py-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none font-bold text-white flex items-center justify-center gap-1"
+                >
+                  <Navigation size={14} /> 랜덤이동
+                </button>
+            </div>
+          </section>
+
+          {/* Work Log Section */}
+          <section className="w-80 bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3 flex flex-col overflow-hidden">
+             <div className="text-sm font-bold text-blue-600 mb-1 border-b-2 border-black pb-1 uppercase tracking-tighter italic">
+               📋 작업 로그
+             </div>
+             <div className="flex-1 overflow-y-auto custom-scrollbar text-[10px] font-mono leading-tight space-y-2 mt-1">
+               {selectedAgentId ? (
+                 (agents.find((a:any) => a.id === selectedAgentId) as any)?.work_history?.length > 0 ? (
+                   (agents.find((a:any) => a.id === selectedAgentId) as any).work_history.map((work: string, i: number) => {
+                     const isFile = work.includes("] FILE:");
+                     let fileName = "";
+                     let displayText = work;
+                     
+                     if (isFile) {
+                       const parts = work.split("FILE:")[1].split("|");
+                       fileName = parts[0];
+                       displayText = work.split("] ")[0] + "] " + parts[1];
+                     }
+
+                     return (
+                       <div key={i} className="bg-blue-50 border-l-4 border-blue-400 p-2 shadow-sm animate-in slide-in-from-left-2">
+                         <div className="text-blue-800 font-bold mb-0.5">{displayText.split('] ')[0]}]</div>
+                         <div className="text-black mb-1">{displayText.split('] ')[1]}</div>
+                         {isFile && (
+                           <a 
+                             href={`http://localhost:8000/outputs/${fileName}`} 
+                             target="_blank" 
+                             rel="noopener noreferrer"
+                             className="inline-flex items-center gap-1 text-[8px] bg-white border border-blue-400 px-1 py-0.5 text-blue-600 hover:bg-blue-100 font-bold"
+                           >
+                             📂 {fileName} 열기
+                           </a>
+                         )}
+                       </div>
+                     );
+                   }).reverse()
+                 ) : (
+                   <div className="h-full flex items-center justify-center text-gray-400 italic">아직 기록된 작업이 없습니다.</div>
+                 )
+               ) : (
+                 <div className="h-full flex items-center justify-center text-gray-400 italic">직원을 선택하면 로그가 표시됩니다.</div>
+               )}
+               <div ref={logEndRef} />
+             </div>
+          </section>
+        </div>
 
       </main>
     </div>
   );
 }
-
 

@@ -9,6 +9,18 @@ interface Agent {
   current_action: string;
   current_thought: string;
   current_speech: string;
+  work_history?: string[];
+  current_task?: {
+    task_id: string;
+    task_type: string;
+    skill_id: string;
+    summary: string;
+    status: string;
+  } | null;
+  skill_profile?: {
+    current_task_status?: string;
+    preferred_skills?: string[];
+  };
 }
 
 interface GameState {
@@ -16,11 +28,15 @@ interface GameState {
   currentMap: any;
   buildMode: boolean;
   selectedTool: string;
+  selectedRotation: number;
+  selectedFlipX: boolean;
   setAgents: (agents: Agent[]) => void;
   updateAgent: (agentId: string, updates: Partial<Agent>) => void;
   setMap: (map: any) => void;
   toggleBuildMode: () => void;
   setSelectedTool: (tool: string) => void;
+  setRotation: (rotation: number) => void;
+  toggleFlipX: () => void;
 }
 
 export const useGameStore = create<GameState>()(
@@ -29,6 +45,8 @@ export const useGameStore = create<GameState>()(
     currentMap: null,
     buildMode: false,
     selectedTool: 'obstacle_desk',
+    selectedRotation: 0,
+    selectedFlipX: false,
     setAgents: (agentList) => {
       const agentMap = agentList.reduce((acc, agent) => ({ ...acc, [agent.id]: agent }), {});
       set({ agents: agentMap });
@@ -42,5 +60,7 @@ export const useGameStore = create<GameState>()(
     setMap: (map) => set({ currentMap: map }),
     toggleBuildMode: () => set((state) => ({ buildMode: !state.buildMode })),
     setSelectedTool: (tool) => set({ selectedTool: tool }),
+    setRotation: (rotation) => set({ selectedRotation: rotation }),
+    toggleFlipX: () => set((state) => ({ selectedFlipX: !state.selectedFlipX })),
   }))
 );

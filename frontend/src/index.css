@@ -8,24 +8,57 @@ html, body {
   margin: 0;
   padding: 0;
   width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background-color: #86efac; /* Bright retro green background */
+  min-height: 100%;
+  background-color: #86efac; 
   font-family: 'NeoDunggeunmo', 'Courier New', monospace;
+  scroll-behavior: smooth;
 }
 
-#root {
-  width: 100%;
-  height: 100%;
-}
-
+/* Classic Retro Game Scrollbar (3D Beveled Style) */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
+  width: 16px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  background-color: #cbd5e1;
+  border-left: 4px solid black;
+  /* Dotted pattern for track */
+  background-image: radial-gradient(#94a3b8 1px, transparent 1px);
+  background-size: 4px 4px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 10px;
+  background-color: #94a3b8;
+  border: 4px solid black;
+  /* 3D bevel effect using inset shadows */
+  box-shadow: 
+    inset 2px 2px 0px 0px #f8fafc, 
+    inset -2px -2px 0px 0px #475569;
 }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:active {
+  background-color: #475569;
+  box-shadow: 
+    inset -2px -2px 0px 0px #f8fafc, 
+    inset 2px 2px 0px 0px #000;
+}
+
+/* Smooth Scrolling Container (Momentum-like feel) */
+.custom-scrollbar {
+  scroll-behavior: smooth;
+  /* Force hardware acceleration for smoother motion */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000;
+  overflow-y: auto;
+}
+
+
+
+
+/* Removal of entrance animations as requested */
+.animate-in-up, .stagger-1, .stagger-2, .stagger-3, .stagger-4, .stagger-5 {
+  animation: none !important;
+}
+
+

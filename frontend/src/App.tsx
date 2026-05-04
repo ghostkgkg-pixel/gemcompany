@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SetupPage } from './components/SetupPage';
 import { SimulationPage } from './components/SimulationPage';
 import { initSocket } from './services/socket';
@@ -11,12 +11,15 @@ function App() {
     initSocket();
   }, []);
 
+  const handleStart = useCallback(() => setCurrentView('simulation'), []);
+  const handleGoBack = useCallback(() => setCurrentView('setup'), []);
+
   return (
     <>
       {currentView === 'setup' ? (
-        <SetupPage onStart={() => setCurrentView('simulation')} />
+        <SetupPage onStart={handleStart} />
       ) : (
-        <SimulationPage onGoBack={() => setCurrentView('setup')} />
+        <SimulationPage onGoBack={handleGoBack} />
       )}
     </>
   );

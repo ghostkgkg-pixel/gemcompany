@@ -1,51 +1,42 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Dict, Optional, Any
-import uuid
-import os
+from __future__ import annotations
+
 import asyncio
-import json
-import time
-import random
-from pathfinding import AStar
-
-# Phase 2 & 3 modules
-from persona import PersonaManager
-from memory import MemoryManager
-from connector import GeminiConnector
-
+from dataclasses import dataclass, field
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import json
+import os
+from pathfinding import AStar
+from pydantic import BaseModel
+import random
+import re
 import socketio
-from dataclasses import dataclass, field
+import time
+from typing import Any, Dict, List, Optional
+import uuid
 
-# --- CLI Task Queue ---
+from connector import GeminiConnector
+from persona import PersonaManager
+from skill_system import FAST_MODEL, SkillRegistry, SkillRouter, TaskClassifier
+from work_memory import WorkMemoryManager
+
+
 @dataclass(order=True)
 class CLITask:
     priority: int
-    prompt: str = field(compare=False)
-    future: asyncio.Future = field(default_factory=asyncio.Future, compare=False)
+    created_at: float = field(default_factory=time.time)
+    prompt: str = field(compare=False, default="")
+    kind: str = field(compare=False, default="work_execution")
+    model: str = field(compare=False, default=FAST_MODEL)
+    agent_id: str = field(compare=False, default="")
+    task_id: str = field(compare=False, default="")
+    summary: str = field(compare=False, default="")
+    skill_id: str = field(compare=False, default="")
+    workspace_dir: Optional[str] = field(compare=False, default=None)
+    future: Optional[asyncio.Future] = field(compare=False, default=None)
 
-cli_queue = asyncio.PriorityQueue()
 
-async def cli_worker():
-    connector = GeminiConnector()
-    loop = asyncio.get_event_loop()
-    while True:
-        task = await cli_queue.get()
-        try:
-            # We use run_in_executor because send_prompt_json is synchronous
-            result = await loop.run_in_executor(None, connector.send_prompt_json, task.prompt)
-            task.future.set_result(result)
-        except Exception as e:
-            if not task.future.done():
-                task.future.set_exception(e)
-        finally:
-            cli_queue.task_done()
-            # Small delay between any two CLI calls to avoid hammering the API
-            await asyncio.sleep(1.5)
-
-# --- Models ---
 class MapZone(BaseModel):
     name: str
     aliases: List[str] = []
@@ -56,12 +47,14 @@ class MapZone(BaseModel):
     color: Optional[str] = "#cccccc"
     icon: Optional[str] = "room"
 
+
 class MapObstacle(BaseModel):
     x: int
     y: int
     type: str
     rotation: int = 0
     flip_x: bool = False
+
 
 class MapTemplate(BaseModel):
     id: str
@@ -71,6 +64,7 @@ class MapTemplate(BaseModel):
     zones: List[MapZone]
     obstacles: List[MapObstacle] = []
     zone_data: Optional[List[List[str]]] = None
+
 
 class Agent(BaseModel):
     id: str
@@ -88,33 +82,46 @@ class Agent(BaseModel):
     appearance: Dict = {}
     work_history: List[str] = []
     last_action_time: float = 0.0
+    skill_profile: Dict = {}
+    current_task: Optional[Dict[str, Any]] = None
 
-# --- Default Data ---
+
 MAP_TEMPLATES = {
     "standard_office": MapTemplate(
-        id="standard_office", name="Standard Office", width=27, height=11,
+        id="standard_office",
+        name="Standard Office",
+        width=27,
+        height=11,
         zones=[
             MapZone(name="Meeting Room", aliases=["회의실", "미팅룸", "meeting"], x1=0, y1=0, x2=6, y2=4, color="#e3f2fd", icon="groups"),
-            MapZone(name="Work Zone", aliases=["업무구역", "사무실", "데스크", "work"], x1=7, y1=0, x2=26, y2=10, color="#f5f5f5", icon="desktop_windows"),
-            MapZone(name="Break Area", aliases=["휴게실", "탕비실", "카페", "break"], x1=0, y1=5, x2=6, y2=10, color="#e8f5e9", icon="coffee")
+            MapZone(name="Work Zone", aliases=["업무 구역", "사무실", "work"], x1=7, y1=0, x2=26, y2=10, color="#f5f5f5", icon="desktop_windows"),
+            MapZone(name="Break Area", aliases=["휴게실", "카페", "break"], x1=0, y1=5, x2=6, y2=10, color="#e8f5e9", icon="coffee"),
         ],
-        obstacles=[MapObstacle(x=6, y=5, type="obstacle_plant")]
+        obstacles=[MapObstacle(x=6, y=5, type="obstacle_plant")],
     )
 }
 
-# --- In-memory Storage ---
 agents: Dict[str, Agent] = {}
 current_map: Optional[MapTemplate] = None
 USER_SAVED_MAPS: Dict[str, MapTemplate] = {}
+interactive_queue: Optional[asyncio.PriorityQueue] = None
+background_queue: Optional[asyncio.PriorityQueue] = None
+agent_locks: Dict[str, asyncio.Lock] = {}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(BASE_DIR)
 STATE_FILE = os.path.join(BASE_DIR, "world_state.json")
+WORK_MEMORY_FILE = os.path.join(BASE_DIR, "work_memory.json")
 OUTPUT_DIR = os.path.join(BASE_DIR, "work_outputs")
+SKILLS_DIR = os.path.join(ROOT_DIR, "skills", "office")
 
-# --- Socket.io Server Setup ---
-sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+skill_registry = SkillRegistry(SKILLS_DIR)
+task_classifier = TaskClassifier()
+skill_router = SkillRouter(skill_registry)
+work_memory = WorkMemoryManager(WORK_MEMORY_FILE)
+
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 sio_app = socketio.ASGIApp(sio)
-
 app = FastAPI(title="AI Agent Office Engine")
 
 app.add_middleware(
@@ -125,209 +132,469 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-if not os.path.exists(OUTPUT_DIR):
-    os.makedirs(OUTPUT_DIR)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
 
-@sio.event
-async def connect(sid, environ, auth=None):
-    print(f"Client connected: {sid}")
-    m_data = current_map or MAP_TEMPLATES["standard_office"]
-    await sio.emit('map_update', m_data.model_dump(), to=sid)
-    await sio.emit('agents_update', [a.model_dump() for a in agents.values()], to=sid)
 
-@sio.event
-async def disconnect(sid):
-    print(f"Client disconnected: {sid}")
+def get_agent_lock(agent_id: str) -> asyncio.Lock:
+    if agent_id not in agent_locks:
+        agent_locks[agent_id] = asyncio.Lock()
+    return agent_locks[agent_id]
 
-async def broadcast_agents():
-    await sio.emit('agents_update', [a.model_dump() for a in agents.values()])
 
-async def broadcast_map(map_data):
-    await sio.emit('map_update', map_data)
+def default_allowed_skills() -> List[str]:
+    return list(skill_registry.skills.keys())
 
-# --- State Management ---
-def save_state():
+
+def hydrate_agent_runtime(agent: Agent) -> None:
+    snapshot = work_memory.snapshot(agent.id)
+    agent.skill_profile = snapshot["profile"]
+    agent.current_task = snapshot["current_task"]
+
+
+def sync_all_agents() -> None:
+    for agent in agents.values():
+        hydrate_agent_runtime(agent)
+
+
+def sanitize_filename(name: str) -> str:
+    cleaned = "".join(c for c in name if c.isalnum() or c in "._-").strip("._")
+    if not cleaned:
+        cleaned = f"work_{uuid.uuid4().hex[:8]}.md"
+    if len(cleaned) > 80:
+        prefix, _, suffix = cleaned.rpartition(".")
+        cleaned = (prefix[:60] if prefix else cleaned[:60]) + (f".{suffix[:10]}" if suffix else "")
+    return cleaned
+
+
+def append_work_history(agent: Agent, message: str) -> None:
+    agent.work_history.append(f"[{time.strftime('%H:%M')}] {message}")
+    agent.work_history = agent.work_history[-12:]
+
+
+def zone_summary_for_agent(agent: Agent) -> str:
+    m = current_map or MAP_TEMPLATES["standard_office"]
+    for zone in m.zones:
+        if zone.x1 <= agent.x <= zone.x2 and zone.y1 <= agent.y <= zone.y2:
+            return zone.name
+    return "Hallway"
+
+
+def set_agent_action(agent: Agent, action: str) -> None:
+    m = current_map or MAP_TEMPLATES["standard_office"]
+    if not action or not isinstance(action, str):
+        action = "Idle"
+
+    if action.startswith("Moving to "):
+        target_str = action.replace("Moving to ", "").strip()
+        coord_match = re.match(r"\(?(\d+)\s*,\s*(\d+)\)?", target_str)
+        if coord_match:
+            agent.target_x = int(coord_match.group(1))
+            agent.target_y = int(coord_match.group(2))
+            agent.current_action = f"Moving to ({agent.target_x}, {agent.target_y})"
+            return
+
+        target_zone = next(
+            (
+                zone
+                for zone in m.zones
+                if zone.name.lower() == target_str.lower()
+                or any(alias.lower() == target_str.lower() for alias in zone.aliases)
+            ),
+            None,
+        )
+        if target_zone:
+            agent.target_x = (target_zone.x1 + target_zone.x2) // 2
+            agent.target_y = (target_zone.y1 + target_zone.y2) // 2
+            agent.current_action = f"Moving to {target_zone.name}"
+            return
+
+    agent.current_action = action
+
+
+def save_state() -> None:
+    sync_all_agents()
     state = {
-        "agents": [a.model_dump() for a in agents.values()],
+        "agents": [agent.model_dump() for agent in agents.values()],
         "current_map": current_map.model_dump() if current_map else None,
-        "user_saved_maps": {k: v.model_dump() for k, v in USER_SAVED_MAPS.items()}
+        "user_saved_maps": {k: v.model_dump() for k, v in USER_SAVED_MAPS.items()},
     }
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
-def load_state():
+
+def load_state() -> None:
     global current_map
     if not os.path.exists(STATE_FILE):
         return
     try:
         with open(STATE_FILE, "r", encoding="utf-8") as f:
             state = json.load(f)
-            for a_data in state.get("agents", []):
-                agents[a_data["id"]] = Agent(**a_data)
-            if state.get("current_map"):
-                current_map = MapTemplate(**state["current_map"])
-            for k, v in state.get("user_saved_maps", {}).items():
-                USER_SAVED_MAPS[k] = MapTemplate(**v)
-            print(f"State loaded: {len(agents)} agents.")
-    except Exception as e:
-        print(f"Failed to load state: {e}")
+        for agent_data in state.get("agents", []):
+            agent = Agent(**agent_data)
+            hydrate_agent_runtime(agent)
+            agents[agent.id] = agent
+        if state.get("current_map"):
+            current_map = MapTemplate(**state["current_map"])
+        for map_id, map_data in state.get("user_saved_maps", {}).items():
+            USER_SAVED_MAPS[map_id] = MapTemplate(**map_data)
+    except Exception as exc:
+        print(f"Failed to load state: {exc}")
 
-# --- Agent Processing ---
-async def process_agent_response(agent, response_data):
-    if not isinstance(response_data, dict):
-        response_data = {"thought": str(response_data), "speech": "응답을 해석할 수 없습니다.", "action": "Idle"}
-    
-    m = current_map or MAP_TEMPLATES["standard_office"]
-    agent.current_thought = response_data.get("thought", "")
-    agent.current_speech = response_data.get("speech", "")
+
+@sio.event
+async def connect(sid, environ, auth=None):
+    sync_all_agents()
+    m_data = current_map or MAP_TEMPLATES["standard_office"]
+    await sio.emit("map_update", m_data.model_dump(), to=sid)
+    await sio.emit("agents_update", [agent.model_dump() for agent in agents.values()], to=sid)
+
+
+@sio.event
+async def disconnect(sid):
+    print(f"Client disconnected: {sid}")
+
+
+async def broadcast_agents():
+    sync_all_agents()
+    await sio.emit("agents_update", [agent.model_dump() for agent in agents.values()])
+
+
+async def broadcast_map(map_data):
+    await sio.emit("map_update", map_data)
+
+
+def build_task_prompt(agent: Agent, message: str, task_type: str):
+    brief = work_memory.build_brief(agent.id)
+    profile = work_memory.ensure_profile(agent.id, default_allowed_skills())
+    selection = skill_router.select_skill(agent.model_dump(), task_type, brief, profile)
+    skill = selection.skill
+
+    persona_summary = {
+        "name": agent.name,
+        "job": agent.persona.get("Job", agent.persona.get("Role", "Generalist")),
+        "stats": agent.stats,
+        "zone": zone_summary_for_agent(agent),
+    }
+    recent_results = "\n".join(f"- {item}" for item in brief.recent_results) or "- None"
+    recent_failures = "\n".join(f"- {item}" for item in brief.recent_failures) or "- None"
+    current_task = brief.current_task or "None"
+
+    prompt = (
+        "You are an office AI agent working inside a virtual office simulation.\n"
+        "Use reasonable assumptions and make progress without asking for more detail unless you are truly blocked.\n"
+        "If the request implies a codebase task, inspect the current project files and produce the best concrete artifact you can.\n"
+        f"Persona Summary: {json.dumps(persona_summary, ensure_ascii=False)}\n"
+        f"Current Task Brief: {current_task}\n"
+        f"Recent Results:\n{recent_results}\n"
+        f"Recent Failures:\n{recent_failures}\n"
+        f"User Request: {message}\n\n"
+        "Selected Skill:\n"
+        f"{skill.prompt}\n\n"
+        "Output Rules:\n"
+        "- Respond in Korean.\n"
+        "- Return JSON only.\n"
+        "- 'action' should usually be 'Idle' unless movement is essential.\n"
+        "- Include 'file_output' when the work benefits from a saved artifact.\n"
+        "- Prefer delivering a useful draft, code snippet, or file over asking clarifying questions.\n"
+    )
+    return prompt, selection
+
+
+def initialize_agent_profile(agent: Agent) -> None:
+    job_text = " ".join(
+        str(value).lower()
+        for value in [agent.persona.get("Job", ""), agent.persona.get("Role", ""), agent.name]
+    )
+    preferred = []
+    if any(keyword in job_text for keyword in ["developer", "engineer", "개발"]):
+        preferred = ["code_generation", "bug_fix", "code_review"]
+    elif any(keyword in job_text for keyword in ["marketing", "marketer", "마케팅"]):
+        preferred = ["marketing_copy", "research_summary"]
+    elif any(keyword in job_text for keyword in ["planner", "manager", "기획", "pm"]):
+        preferred = ["feature_spec_write", "document_write", "research_summary"]
+
+    snapshot = work_memory.snapshot(agent.id)
+    profile = snapshot["profile"]
+    if not profile["allowed_skills"]:
+        work_memory.ensure_profile(agent.id, default_allowed_skills())
+    bucket = work_memory._agent_bucket(agent.id)
+    if preferred and not bucket["preferred_skills"]:
+        bucket["preferred_skills"] = preferred
+        work_memory.save()
+    hydrate_agent_runtime(agent)
+
+
+async def apply_local_response(agent: Agent, speech: str, action: str, thought: str = "") -> None:
+    agent.current_speech = speech
+    agent.current_thought = thought
     agent.last_action_time = time.time()
-    
-    work_result = response_data.get("work_result")
-    if work_result:
-        file_out = response_data.get("file_output")
-        if isinstance(file_out, dict) and file_out.get("name") and file_out.get("content"):
-            f_name = "".join(c for c in file_out["name"] if c.isalnum() or c in "._-").strip()
-            if f_name:
-                f_path = os.path.join(OUTPUT_DIR, f_name)
-                with open(f_path, "w", encoding="utf-8") as f:
-                    f.write(file_out["content"])
-                work_result = f"FILE:{f_name}|{work_result}"
-        
-        agent.work_history.append(f"[{time.strftime('%H:%M')}] {work_result}")
-        if len(agent.work_history) > 10: agent.work_history.pop(0)
-    
-    action = response_data.get("action")
-    if not action or not isinstance(action, str):
-        action = "Idle"
-        
-    if action.startswith("Moving to "):
-        target_zone_name = action.replace("Moving to ", "").strip()
-        target_zone = next((z for z in m.zones if z.name.lower() == target_zone_name.lower() or any(a.lower() == target_zone_name.lower() for a in z.aliases)), None)
-        if target_zone:
-            agent.target_x = (target_zone.x1 + target_zone.x2) // 2
-            agent.target_y = (target_zone.y1 + target_zone.y2) // 2
-            agent.current_action = f"Moving to {target_zone.name}"
-        else:
-            agent.current_action = action
-    else:
-        agent.current_action = action
-        
+    set_agent_action(agent, action)
+    hydrate_agent_runtime(agent)
     await broadcast_agents()
     save_state()
 
-# --- World Engine Loops ---
+
+async def process_agent_response(agent: Agent, response_data: Dict[str, Any], cli_task: Optional[CLITask] = None):
+    if not isinstance(response_data, dict):
+        response_data = {
+            "thought": str(response_data),
+            "speech": "응답을 해석하는 중 문제가 생겼어요.",
+            "action": "Idle",
+        }
+
+    agent.current_thought = response_data.get("thought", "")
+    agent.current_speech = response_data.get("speech", "")
+    agent.last_action_time = time.time()
+    set_agent_action(agent, response_data.get("action", "Idle"))
+
+    work_result = response_data.get("work_result", "")
+    file_name = ""
+    file_out = response_data.get("file_output")
+    if isinstance(file_out, dict) and file_out.get("name") and file_out.get("content"):
+        file_name = sanitize_filename(file_out["name"])
+        with open(os.path.join(OUTPUT_DIR, file_name), "w", encoding="utf-8") as f:
+            f.write(file_out["content"])
+
+    if work_result:
+        history_item = work_result
+        if file_name:
+            history_item = f"FILE:{file_name}|{work_result}"
+        append_work_history(agent, history_item)
+
+    if cli_task and cli_task.task_id:
+        work_memory.complete_task(agent.id, cli_task.task_id, work_result or "작업 완료", file_name=file_name)
+
+    hydrate_agent_runtime(agent)
+    await broadcast_agents()
+    save_state()
+
+
+async def handle_task_failure(agent: Agent, cli_task: CLITask, error: Exception):
+    if cli_task.task_id:
+        work_memory.fail_task(agent.id, cli_task.task_id, str(error))
+    agent.current_thought = str(error)
+    agent.current_speech = "작업 중 문제가 생겨서 다시 확인이 필요해요."
+    agent.current_action = "Idle"
+    hydrate_agent_runtime(agent)
+    await broadcast_agents()
+    save_state()
+
+
+async def cli_worker(queue_name: str, queue: asyncio.PriorityQueue):
+    connector = GeminiConnector(default_model=FAST_MODEL)
+    loop = asyncio.get_event_loop()
+    while True:
+        task: CLITask = await queue.get()
+        try:
+            agent = agents.get(task.agent_id)
+            if agent is None:
+                continue
+
+            async with get_agent_lock(task.agent_id):
+                if task.task_id:
+                    work_memory.mark_in_progress(task.agent_id, task.task_id)
+                    hydrate_agent_runtime(agent)
+                    await broadcast_agents()
+                result = await loop.run_in_executor(
+                    None,
+                    connector.send_prompt_json,
+                    task.prompt,
+                    task.model,
+                    task.workspace_dir,
+                )
+                await process_agent_response(agent, result, task)
+                if task.future and not task.future.done():
+                    task.future.set_result(result)
+        except Exception as exc:
+            agent = agents.get(task.agent_id)
+            if agent is not None:
+                await handle_task_failure(agent, task, exc)
+            if task.future and not task.future.done():
+                task.future.set_exception(exc)
+        finally:
+            queue.task_done()
+            if queue_name == "background":
+                await asyncio.sleep(0.2)
+
+
+def create_agent(name: str, persona_data: Dict[str, Any], appearance: Dict[str, Any], x: int, y: int) -> Agent:
+    agent = Agent(
+        id=str(uuid.uuid4())[:8],
+        name=name,
+        persona=persona_data,
+        stats={k: v for k, v in persona_data.items() if k not in {"Name", "Job"}},
+        x=x,
+        y=y,
+        current_action="Idle",
+        current_thought="Ready for work.",
+        current_speech="안녕하세요!",
+        appearance=appearance,
+    )
+    initialize_agent_profile(agent)
+    return agent
+
+
+def is_agent_busy(agent: Agent) -> bool:
+    current_task = agent.current_task or {}
+    return current_task.get("status") in {"queued", "in_progress"}
+
+
+async def enqueue_skill_task(agent: Agent, message: str, task_type: str, priority: int = 1) -> None:
+    prompt, selection = build_task_prompt(agent, message, task_type)
+    task_id = str(uuid.uuid4())[:8]
+    work_memory.start_task(agent.id, task_id, task_type, selection.skill.id, message)
+    hydrate_agent_runtime(agent)
+    agent.current_action = f"Working with {selection.skill.name}"
+    append_work_history(agent, f"TASK:{task_type}|{message[:80]}")
+    task = CLITask(
+        priority=priority,
+        prompt=prompt,
+        kind="work_execution",
+        model=selection.model,
+        agent_id=agent.id,
+        task_id=task_id,
+        summary=message,
+        skill_id=selection.skill.id,
+        workspace_dir=ROOT_DIR,
+    )
+    target_queue = interactive_queue if priority == 0 else background_queue
+    await target_queue.put(task)
+
+
 async def world_tick_loop():
     while True:
         m = current_map or MAP_TEMPLATES["standard_office"]
-        obs_tuples = [(o.x, o.y) for o in m.obstacles]
+        obs_tuples = [(obs.x, obs.y) for obs in m.obstacles]
         astar = AStar(m.width, m.height, obs_tuples)
-        
         changed = False
+
         for agent in agents.values():
-            if agent.target_x is not None and agent.target_y is not None:
-                target = (agent.target_x, agent.target_y)
-                current = (agent.x, agent.y)
-                
-                if current == target:
+            if agent.target_x is None or agent.target_y is None:
+                continue
+            target = (agent.target_x, agent.target_y)
+            current = (agent.x, agent.y)
+
+            if current == target:
+                agent.target_x = None
+                agent.target_y = None
+                agent.path = []
+                if not is_agent_busy(agent):
+                    agent.current_action = "Idle"
+                changed = True
+                continue
+
+            path_invalid = any(tuple(step) in obs_tuples for step in agent.path)
+            if not agent.path or tuple(agent.path[-1]) != target or path_invalid:
+                new_path = astar.find_path(current, target)
+                if new_path:
+                    agent.path = [list(step) for step in new_path]
+                else:
                     agent.target_x = None
                     agent.target_y = None
                     agent.path = []
-                    agent.current_action = "Idle"
+                    agent.current_action = "Unreachable"
                     changed = True
                     continue
 
-                path_invalid = False
-                if agent.path:
-                    for p in agent.path:
-                        if tuple(p) in obs_tuples:
-                            path_invalid = True
-                            break
+            if agent.path:
+                next_step = agent.path.pop(0)
+                agent.x, agent.y = next_step[0], next_step[1]
+                changed = True
 
-                if not agent.path or tuple(agent.path[-1]) != target or path_invalid:
-                    new_path = astar.find_path(current, target)
-                    if new_path:
-                        agent.path = [list(p) for p in new_path]
-                    else:
-                        agent.target_x = None; agent.target_y = None; agent.path = []
-                        agent.current_action = "Unreachable"; changed = True; continue
-                
-                if agent.path:
-                    next_step = agent.path.pop(0)
-                    agent.x, agent.y = next_step[0], next_step[1]
-                    changed = True
-        
-        if changed: await broadcast_agents()
+        if changed:
+            await broadcast_agents()
         await asyncio.sleep(0.5)
 
+
 async def autonomous_decision_loop():
-    connector = GeminiConnector()
-    loop = asyncio.get_event_loop()
     while True:
-        await asyncio.sleep(60)  # Increased further to 60 to give full bandwidth to user chat
-        if not agents: continue
-        m = current_map or MAP_TEMPLATES["standard_office"]
-        now = time.time()
-        candidates = [a for a in agents.values() if a.current_action in ["Idle", "Unreachable"] or (now - a.last_action_time > 30)]
-        if not candidates: continue
-        
-        # Process only 1 agent per loop to avoid hitting rate limits
-        to_act = random.sample(candidates, 1)
-        async def act(agent):
-            current_zone_name = "Hallway"
-            for z in m.zones:
-                if z.x1 <= agent.x <= z.x2 and z.y1 <= agent.y <= z.y2:
-                    current_zone_name = z.name; break
-            
-            nearby_agents = [f"{o.name} (doing: {o.current_action})" for o in agents.values() if o.id != agent.id and abs(agent.x-o.x)+abs(agent.y-o.y)<=3]
-            nearby_str = ", ".join(nearby_agents) if nearby_agents else "No one nearby."
-            zones_info = [f"('{z.name}', {z.aliases})" for z in m.zones]
-            
-            prompt = f"ROLE: Office AI Agent. PERSONA: {agent.persona}. CONTEXT: ({agent.x}, {agent.y}) in {current_zone_name}. Zones: {zones_info}. Nearby: {nearby_str}. INSTRUCTION: Act. Korean only. JSON {{thought, speech, action, work_result, file_output}}"
-            
-            # Use Priority Queue (Priority 1 for autonomous)
-            task = CLITask(priority=1, prompt=prompt)
-            await cli_queue.put(task)
-            try:
-                response_data = await task.future
-                await process_agent_response(agent, response_data)
-            except Exception as e:
-                print(f"Autonomous error for {agent.name}: {e}")
+        await asyncio.sleep(8)
+        if not agents:
+            continue
+        idle_agents = [agent for agent in agents.values() if not is_agent_busy(agent) and agent.current_action in {"Idle", "Unreachable"}]
+        if not idle_agents:
+            continue
 
-        for a in to_act:
-            await act(a)
+        agent = random.choice(idle_agents)
+        zone = zone_summary_for_agent(agent)
+        if random.random() < 0.55:
+            available_zones = [item for item in (current_map or MAP_TEMPLATES["standard_office"]).zones if item.name != zone]
+            if available_zones:
+                destination = random.choice(available_zones)
+                set_agent_action(agent, f"Moving to {destination.name}")
+                agent.current_speech = f"{destination.name} 쪽 상황을 보고 올게요."
+                agent.current_thought = "Doing a lightweight patrol."
+        else:
+            job = agent.persona.get("Job", agent.persona.get("Role", "직원"))
+            agent.current_speech = f"{job} 관점에서 다음 작업을 준비 중이에요."
+            agent.current_thought = "Waiting for the next meaningful task."
+            agent.current_action = "Idle"
+        agent.last_action_time = time.time()
+        await broadcast_agents()
+        save_state()
 
-# --- API Endpoints ---
+
 @app.on_event("startup")
 async def startup_event():
+    global interactive_queue, background_queue
+    interactive_queue = asyncio.PriorityQueue()
+    background_queue = asyncio.PriorityQueue()
     load_state()
+    sync_all_agents()
     asyncio.create_task(world_tick_loop())
     asyncio.create_task(autonomous_decision_loop())
-    asyncio.create_task(cli_worker())  # Start the CLI task worker
+    asyncio.create_task(cli_worker("interactive", interactive_queue))
+    asyncio.create_task(cli_worker("background", background_queue))
+    asyncio.create_task(cli_worker("background", background_queue))
+
 
 @app.post("/agents/{agent_id}/chat")
 async def chat_with_agent(agent_id: str, message: str):
-    if agent_id not in agents: raise HTTPException(status_code=404, detail="Agent not found")
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
     agent = agents[agent_id]
-    prompt = f"ROLE: Office AI Agent. PERSONA: {agent.persona}. CONTEXT: ({agent.x}, {agent.y}). USER MESSAGE: \"{message}\". INSTRUCTION: Respond and act. Korean only. JSON {{thought, speech, action, work_result, file_output}}"
-    
-    # Use Priority Queue (Priority 0 for user chat - High Priority)
-    task = CLITask(priority=0, prompt=prompt)
-    await cli_queue.put(task)
-    try:
-        response_data = await task.future
-        await process_agent_response(agent, response_data)
+    hydrate_agent_runtime(agent)
+    classification = task_classifier.classify(message)
+
+    if not classification.requires_cli:
+        await apply_local_response(
+            agent,
+            classification.local_speech,
+            classification.local_action,
+            thought=f"Handled locally via {classification.reason}",
+        )
         return agent
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    if is_agent_busy(agent):
+        await apply_local_response(
+            agent,
+            "지금 다른 무거운 작업을 처리 중이라서, 완료 후 다시 요청해 주세요.",
+            agent.current_action or "Idle",
+            thought="Busy with an existing heavy task.",
+        )
+        return agent
+
+    await enqueue_skill_task(agent, message, classification.task_type, priority=0)
+    agent.current_speech = classification.local_speech
+    agent.current_thought = f"Routing task as {classification.task_type}"
+    agent.last_action_time = time.time()
+    await broadcast_agents()
+    save_state()
+    return agent
+
 
 @app.get("/map/current")
 async def get_current_map():
     return current_map or MAP_TEMPLATES["standard_office"]
 
+
 @app.get("/agents")
 async def list_agents():
+    sync_all_agents()
     return list(agents.values())
+
 
 @app.post("/map/select/{map_id}")
 async def select_map(map_id: str):
@@ -342,39 +609,42 @@ async def select_map(map_id: str):
     save_state()
     return current_map
 
+
 @app.post("/agents/spawn")
 async def spawn_agent(description: str):
     pm = PersonaManager()
     persona_data = pm.analyze_persona(description)
-    agent_id = str(uuid.uuid4())[:8]
     m = current_map or MAP_TEMPLATES["standard_office"]
-    new_agent = Agent(
-        id=agent_id, name=persona_data.get("Name", "New Agent"), persona=persona_data, 
-        stats={k: v for k, v in persona_data.items() if k != "Name"},
-        x=random.randint(0, m.width-1), y=random.randint(0, m.height-1), 
-        current_action="Idle", current_thought="Just spawned!", current_speech="안녕하세요!",
-        appearance={"body": "body_light", "hair_style": "hair_short", "hair_color": "#4B2C20", "outfit": "agent_dev", "gender": "male"}
+    agent = create_agent(
+        name=persona_data.get("Name", "New Agent"),
+        persona_data=persona_data,
+        appearance={"body": "body_light", "hair_style": "hair_short", "hair_color": "#4B2C20", "outfit": "agent_dev", "gender": "male"},
+        x=random.randint(0, m.width - 1),
+        y=random.randint(0, m.height - 1),
     )
-    agents[agent_id] = new_agent
+    agents[agent.id] = agent
     await broadcast_agents()
     save_state()
-    return new_agent
+    return agent
+
 
 @app.post("/agents/hire")
 async def hire_agent(name: str, job: str, persona: str, body: str, hair_style: str, hair_color: str, outfit: str, gender: str = "male"):
     pm = PersonaManager()
     persona_data = pm.analyze_persona(f"Job: {job}. Personality: {persona}")
     persona_data["Job"] = job
-    agent_id = str(uuid.uuid4())[:8]
-    new_agent = Agent(
-        id=agent_id, name=name, persona=persona_data, stats={k: v for k, v in persona_data.items() if k != "Name"},
-        x=5, y=5, current_action="Idle", current_thought="Joined!", current_speech="Excited!",
-        appearance={"body": body, "hair_style": hair_style, "hair_color": hair_color, "outfit": outfit, "gender": gender}
+    agent = create_agent(
+        name=name,
+        persona_data=persona_data,
+        appearance={"body": body, "hair_style": hair_style, "hair_color": hair_color, "outfit": outfit, "gender": gender},
+        x=5,
+        y=5,
     )
-    agents[agent_id] = new_agent
+    agents[agent.id] = agent
     await broadcast_agents()
     save_state()
-    return new_agent
+    return agent
+
 
 @app.post("/map/obstacles/place")
 async def place_obstacle(x: int, y: int, type: str, rotation: int = 0, flip_x: bool = False):
@@ -387,16 +657,15 @@ async def place_obstacle(x: int, y: int, type: str, rotation: int = 0, flip_x: b
     save_state()
     return {"message": "Placed", "obstacles": m.obstacles}
 
+
 @app.post("/agents/{agent_id}/move")
 async def move_agent(agent_id: str, x: int, y: int):
-    if agent_id not in agents: raise HTTPException(status_code=404, detail="Agent not found")
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
     agent = agents[agent_id]
-    agent.target_x = x
-    agent.target_y = y
-    agent.current_action = f"Moving to ({x}, {y})"
-    await broadcast_agents()
-    save_state()
+    await apply_local_response(agent, f"({x}, {y}) 좌표로 이동할게요.", f"Moving to ({x}, {y})", thought="Move requested by user.")
     return agent
+
 
 @app.post("/map/obstacles/remove")
 async def remove_obstacle(x: int, y: int):
@@ -407,6 +676,7 @@ async def remove_obstacle(x: int, y: int):
     await broadcast_map(m.model_dump())
     save_state()
     return {"message": "Removed", "obstacles": m.obstacles}
+
 
 @app.post("/map/zones/set")
 async def set_zone_tile(x: int, y: int, zone_type: str):
@@ -422,9 +692,10 @@ async def set_zone_tile(x: int, y: int, zone_type: str):
         return {"message": "Zone updated"}
     raise HTTPException(status_code=400, detail="Out of bounds")
 
+
 @app.post("/map/save")
 async def save_map(name: str):
-    global current_map, USER_SAVED_MAPS
+    global current_map
     if current_map:
         current_map.name = name
         USER_SAVED_MAPS[name] = current_map
@@ -432,18 +703,27 @@ async def save_map(name: str):
         return {"message": f"Map '{name}' saved successfully"}
     raise HTTPException(status_code=400, detail="No map to save")
 
+
 @app.get("/map/templates")
 async def get_map_templates():
     return {
         "defaults": MAP_TEMPLATES,
-        "saved": USER_SAVED_MAPS
+        "saved": USER_SAVED_MAPS,
     }
+
+
+@app.get("/skills")
+async def list_skills():
+    return [skill.__dict__ for skill in skill_registry.skills.values()]
+
 
 @app.get("/")
 async def root():
     return {"status": "Running"}
 
+
 if __name__ == "__main__":
     import uvicorn
+
     combined_app = socketio.ASGIApp(sio, other_asgi_app=app)
     uvicorn.run(combined_app, host="0.0.0.0", port=8000)

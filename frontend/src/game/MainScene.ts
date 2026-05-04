@@ -7,11 +7,14 @@ export class MainScene extends Phaser.Scene {
     super('MainScene');
   }
 
-  private agentSprites: Map<string, { container: Phaser.GameObjects.Container, body: Phaser.GameObjects.Sprite, label: Phaser.GameObjects.Text, bubble: Phaser.GameObjects.Text }> = new Map();
+  private agentSprites: Map<string, { container: Phaser.GameObjects.Container, body: Phaser.GameObjects.Sprite, label: Phaser.GameObjects.Text, bubble: Phaser.GameObjects.Text, status: Phaser.GameObjects.Text }> = new Map();
 
-  private unsubscribe: (() => void) | null = null;
+  private unsubscribers: (() => void)[] = [];
   
   private mapContainer!: Phaser.GameObjects.Container;
+  private previewContainer!: Phaser.GameObjects.Container;
+  private previewSprite!: Phaser.GameObjects.Sprite;
+  private previewRect!: Phaser.GameObjects.Rectangle;
   private gridSize: number = 40;
   preload() {
     this.load.image('floor_work', 'assets/floor_work.png');
@@ -39,6 +42,43 @@ export class MainScene extends Phaser.Scene {
     create() {
     this.mapContainer = this.add.container(0, 0);
 
+    // Generate Hair Textures Procedurally
+    const hairStyles = [
+        { key: 'hair_short', draw: (g: Phaser.GameObjects.Graphics) => {
+            g.fillStyle(0xffffff);
+            g.fillRect(-10, -15, 20, 10); // Top cap
+        }},
+        { key: 'hair_long', draw: (g: Phaser.GameObjects.Graphics) => {
+            g.fillStyle(0xffffff);
+            g.fillRect(-10, -15, 20, 10); // Top cap
+            g.fillRect(-12, -10, 4, 15); // Left long
+            g.fillRect(8, -10, 4, 15); // Right long
+        }},
+        { key: 'hair_spiky', draw: (g: Phaser.GameObjects.Graphics) => {
+            g.fillStyle(0xffffff);
+            g.fillTriangle(-10, -10, 0, -20, 10, -10); // Spikes
+            g.fillRect(-10, -12, 20, 6);
+        }}
+    ];
+
+    hairStyles.forEach(style => {
+        const g = this.make.graphics({ x: 0, y: 0, add: false });
+        style.draw(g);
+        g.generateTexture(style.key, 32, 32);
+    });
+
+    // Base body (just a circle or simple shape for now if no base PNG)
+    const bodyG = this.make.graphics({ x: 0, y: 0, add: false });
+    bodyG.fillStyle(0xffffff);
+    bodyG.fillCircle(16, 16, 12); // Head/Body base
+    bodyG.generateTexture('char_base', 32, 32);
+    
+    // Build Preview Container (Ghost)
+    this.previewContainer = this.add.container(0, 0).setAlpha(0.6).setDepth(1000).setVisible(false);
+    this.previewSprite = this.add.sprite(0, 0, 'obstacle_desk').setOrigin(0.5, 0.5);
+    this.previewRect = this.add.rectangle(0, 0, 40, 40, 0xffffff, 0.5).setOrigin(0.5, 0.5);
+    this.previewContainer.add([this.previewRect, this.previewSprite]);
+
     // INTERACTIVE MAP EDITOR: Click to toggle obstacle
     this.input.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
         const { currentMap, buildMode, selectedTool } = useGameStore.getState();
@@ -60,8 +100,13 @@ export class MainScene extends Phaser.Scene {
                     const zoneType = selectedTool.replace('zone_', '');
                     await setZoneTile(x, y, zoneType);
                 } else {
-                    await placeObstacle(x, y, selectedTool);
+                    const { selectedRotation, selectedFlipX } = useGameStore.getState();
+                    await placeObstacle(x, y, selectedTool, selectedRotation, selectedFlipX);
                 }
+                
+                // Optimistic/Force sync: Although subscription handles it, manual sync ensures immediate feedback
+                const updatedMap = useGameStore.getState().currentMap;
+                if (updatedMap) this.syncMap(updatedMap);
             } catch (error) {
                 console.error("Failed to update tile:", error);
             }
@@ -75,32 +120,38 @@ export class MainScene extends Phaser.Scene {
     if (currentMap) this.syncMap(currentMap);
     
     // Subscribe to store for agent updates safely
-    this.unsubscribe = useGameStore.subscribe(
-      (state) => state.agents,
-      (agents) => {
-        if (this.scene && this.sys) {
-           this.syncAgents(agents);
+    this.unsubscribers.push(
+      useGameStore.subscribe(
+        (state) => state.agents,
+        (agents) => {
+          if (this.scene && this.sys && this.sys.game) {
+            this.syncAgents(agents);
+          }
         }
-      }
+      )
     );
 
     // Also subscribe to map updates
-    useGameStore.subscribe(
-      (state) => state.currentMap,
-      (newMap) => {
-        if (this.scene && this.sys && newMap) {
-          this.syncMap(newMap);
+    this.unsubscribers.push(
+      useGameStore.subscribe(
+        (state) => state.currentMap,
+        (newMap) => {
+          if (newMap && this.scene && this.sys && this.sys.game) {
+            this.syncMap(newMap);
+          }
         }
-      }
+      )
     );
 
     // Cleanup when scene is shut down
     this.events.on('shutdown', () => {
-      if (this.unsubscribe) this.unsubscribe();
+      this.unsubscribers.forEach(unsub => unsub());
+      this.unsubscribers = [];
     });
   }
 
     private syncMap(data: any) {
+        if (!this.sys || !this.sys.game || !this.sys.game.canvas) return;
         this.mapContainer.removeAll(true);
         
         // Dynamically calculate grid size to fit the screen while keeping squares
@@ -168,23 +219,15 @@ export class MainScene extends Phaser.Scene {
                     return;
                 }
 
-                // Handle variations by tinting and transforming base assets
-                let tint = 0xffffff;
-                let angle = 0;
-                let flipX = false;
-                let baseKey = obsKey;
-
-                if (obsKey.includes('_2')) {
-                    baseKey = obsKey.replace('_2', '');
-                    tint = 0xddddff; // Bluish/Silver
-                    flipX = true; // Flip horizontally
-                    if (obsKey.includes('plant')) tint = 0x88ff88;
-                } else if (obsKey.includes('_3')) {
-                    baseKey = obsKey.replace('_3', '');
-                    tint = 0xffe4b5; // Wooden/Warm
-                    angle = 90; // Rotate 90 degrees
-                    if (obsKey.includes('plant')) tint = 0x556b2f;
-                }
+                // Use manual rotation and flip_x from obstacle data
+                const tint = 0xffffff;
+                const angle = obs.rotation || 0;
+                const flipX = obs.flip_x || false;
+                
+                // Map variation IDs back to base texture keys
+                let baseKey = obs.type || 'obstacle_desk';
+                if (baseKey.includes('_2')) baseKey = baseKey.replace('_2', '');
+                if (baseKey.includes('_3')) baseKey = baseKey.replace('_3', '');
 
                 const tile = this.add.image(i * this.gridSize + this.gridSize/2, j * this.gridSize + this.gridSize/2, baseKey)
                     .setOrigin(0.5, 0.5)
@@ -259,18 +302,29 @@ export class MainScene extends Phaser.Scene {
         
         // Layered Appearance
         const app = data.appearance || {};
-        const bodyPart = app.body || 'body_light';
-        const outfitPart = app.outfit || 'agent_dev';
-        const hairPart = app.hair || 'none';
+        const skinType = app.body || 'body_light';
+        const hairType = app.hair_style || 'hair_short';
+        const hairColor = app.hair_color || '#4B2C20';
+        const outfitType = app.outfit || 'agent_dev';
 
         const spriteSize = Math.floor(gridSize * 2.5);
+        
+        // Skin Tones
+        let skinTint = 0xffe0bd;
+        if (skinType === 'body_tan') skinTint = 0xe0ac69;
+        if (skinType === 'body_dark') skinTint = 0x8d5524;
 
-        const bodySprite = this.add.sprite(0, 0, bodyPart).setDisplaySize(spriteSize, spriteSize);
-        const outfitSprite = this.add.sprite(0, 0, outfitPart).setDisplaySize(spriteSize, spriteSize);
-        const hairSprite = hairPart !== 'none' ? this.add.sprite(0, 0, hairPart).setDisplaySize(spriteSize, spriteSize) : null;
+        const bodySprite = this.add.sprite(0, 0, 'char_base').setDisplaySize(spriteSize, spriteSize).setTint(skinTint);
+        const outfitSprite = this.add.sprite(0, 0, outfitType).setDisplaySize(spriteSize, spriteSize);
+        
+        let hairSprite = null;
+        if (hairType !== 'none' && this.textures.exists(hairType)) {
+            const hColor = parseInt(hairColor.replace('#', '0x'));
+            hairSprite = this.add.sprite(0, -5, hairType).setDisplaySize(spriteSize, spriteSize).setTint(hColor);
+        }
         
         // Add all to container
-        const spriteLayers = [bodySprite, outfitSprite];
+        const spriteLayers: Phaser.GameObjects.GameObject[] = [bodySprite, outfitSprite];
         if (hairSprite) spriteLayers.push(hairSprite);
 
         
@@ -294,11 +348,17 @@ export class MainScene extends Phaser.Scene {
           align: 'center',
         }).setOrigin(0.5, 1).setVisible(false);
         
-        // Add retro border to bubble
-        bubble.setStroke('#000000', 3);
-        
-        container.add([...spriteLayers, label, bubble]);
-        this.agentSprites.set(id, { container, body: bodySprite, label, bubble } as any);
+        // Status Line (Floating above name)
+        const status = this.add.text(0, 20, "대기 중...", {
+            fontFamily: 'NeoDunggeunmo',
+            fontSize: '10px',
+            color: '#ffff00',
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            padding: { x: 2, y: 1 }
+        }).setOrigin(0.5).setVisible(false);
+
+        container.add([...spriteLayers, label, bubble, status]);
+        this.agentSprites.set(id, { container, body: bodySprite, label, bubble, status } as any);
       } else {
         // Update existing agent
         const spriteData = this.agentSprites.get(id)!;
@@ -319,6 +379,14 @@ export class MainScene extends Phaser.Scene {
         } else {
           spriteData.bubble.setVisible(false);
         }
+
+        // Update status text
+        if (data.current_action && data.current_action.trim() !== "") {
+          spriteData.status.setText(data.current_action);
+          spriteData.status.setVisible(true);
+        } else {
+          spriteData.status.setVisible(false);
+        }
       }
     }
   }
@@ -326,6 +394,68 @@ export class MainScene extends Phaser.Scene {
     // Remove old renderMap to avoid confusion. syncMap is the true path.
 
   update() {
-    // Game loop
+    const { buildMode, selectedTool, currentMap } = useGameStore.getState();
+    const pointer = this.input.activePointer;
+
+    // Use a simpler check for pointer presence
+    const isPointerOver = pointer.x > 0 && pointer.y > 0 && pointer.x < this.sys.game.canvas.width && pointer.y < this.sys.game.canvas.height;
+
+    if (buildMode && currentMap && isPointerOver) {
+        this.previewContainer.setVisible(true);
+        
+        // Calculate grid position
+        const mapX = pointer.x - this.mapContainer.x;
+        const mapY = pointer.y - this.mapContainer.y;
+        const x = Math.floor(mapX / this.gridSize);
+        const y = Math.floor(mapY / this.gridSize);
+
+        // Snap to grid center for furniture, origin for tiles
+        const snapX = x * this.gridSize + this.gridSize / 2;
+        const snapY = y * this.gridSize + this.gridSize / 2;
+        this.previewContainer.setPosition(this.mapContainer.x + snapX, this.mapContainer.y + snapY);
+
+        // Check if current position is within map bounds
+        const isOutOfBounds = x < 0 || x >= currentMap.width || y < 0 || y >= currentMap.height;
+        const ghostAlpha = isOutOfBounds ? 0.3 : 0.6;
+        const ghostTint = isOutOfBounds ? 0xff0000 : 0xffffff;
+
+        this.previewContainer.setAlpha(ghostAlpha);
+
+        // Update preview appearance based on tool
+        if (selectedTool === 'eraser') {
+            this.previewSprite.setVisible(false);
+            this.previewRect.setVisible(true).setFillStyle(0xff0000, 0.4).setSize(this.gridSize, this.gridSize);
+        } else if (selectedTool.startsWith('zone_')) {
+            this.previewSprite.setVisible(false);
+            this.previewRect.setVisible(true).setSize(this.gridSize, this.gridSize);
+            const tint = isOutOfBounds ? 0xff0000 : (selectedTool === 'zone_meeting' ? 0xbbdefb : (selectedTool === 'zone_break' ? 0xc8e6c9 : 0xf5f5f5));
+            this.previewRect.setFillStyle(tint, 0.6);
+        } else if (selectedTool.startsWith('obstacle_')) {
+            if (selectedTool === 'obstacle_wall') {
+                this.previewSprite.setVisible(false);
+                this.previewRect.setVisible(true).setFillStyle(isOutOfBounds ? 0xff0000 : 0x475569, 0.7).setSize(this.gridSize, this.gridSize);
+            } else {
+                this.previewRect.setVisible(false);
+                this.previewSprite.setVisible(true);
+                
+                const { selectedRotation, selectedFlipX } = useGameStore.getState();
+                
+                // Map variation IDs back to base texture keys
+                let baseKey = selectedTool;
+                if (baseKey.includes('_2')) baseKey = baseKey.replace('_2', '');
+                if (baseKey.includes('_3')) baseKey = baseKey.replace('_3', '');
+                
+                if (this.textures.exists(baseKey)) {
+                    this.previewSprite.setTexture(baseKey)
+                        .setDisplaySize(this.gridSize * 1.8, this.gridSize * 1.8)
+                        .setTint(ghostTint)
+                        .setAngle(selectedRotation)
+                        .setFlipX(selectedFlipX);
+                }
+            }
+        }
+    } else {
+        this.previewContainer.setVisible(false);
+    }
   }
 }

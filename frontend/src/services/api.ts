@@ -17,6 +17,12 @@ export const spawnAgent = async (description: string) => {
   return response.data;
 };
 
+export const hireAgent = async (data: { name: string, job: string, persona: string, body: string, hair_style: string, hair_color: string, outfit: string, gender: string }) => {
+  const params = new URLSearchParams(data as any).toString();
+  const response = await axios.post(`${API_BASE}/agents/hire?${params}`);
+  return response.data;
+};
+
 export const moveAgent = async (agentId: string, x: number, y: number) => {
   const response = await axios.post(`${API_BASE}/agents/${agentId}/move?x=${x}&y=${y}`);
   return response.data;
@@ -27,8 +33,8 @@ export const chatWithAgent = async (agentId: string, message: string) => {
   return response.data;
 };
 
-export const placeObstacle = async (x: number, y: number, type: string) => {
-  const response = await axios.post(`${API_BASE}/map/obstacles/place?x=${x}&y=${y}&type=${type}`);
+export const placeObstacle = async (x: number, y: number, type: string, rotation: number = 0, flipX: boolean = false) => {
+  const response = await axios.post(`${API_BASE}/map/obstacles/place?x=${x}&y=${y}&type=${type}&rotation=${rotation}&flip_x=${flipX}`);
   return response.data;
 };
 
@@ -39,5 +45,10 @@ export const removeObstacle = async (x: number, y: number) => {
 
 export const setZoneTile = async (x: number, y: number, zoneType: string) => {
   const response = await axios.post(`${API_BASE}/map/zones/set?x=${x}&y=${y}&zone_type=${zoneType}`);
+  return response.data;
+};
+
+export const saveMap = async (name: string) => {
+  const response = await axios.post(`${API_BASE}/map/save?name=${encodeURIComponent(name)}`);
   return response.data;
 };

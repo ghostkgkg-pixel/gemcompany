@@ -5,10 +5,14 @@ const SOCKET_URL = 'http://localhost:8000';
 
 // Standard path for Socket.io is /socket.io/
 export const socket = io(SOCKET_URL, {
-  transports: ['websocket'],
+  transports: ['polling', 'websocket'],
 });
 
+let listenersAttached = false;
+
 export const initSocket = () => {
+  if (listenersAttached) return;
+
   socket.on('connect', () => {
     console.log('Connected to server via Socket.io');
   });
@@ -26,4 +30,6 @@ export const initSocket = () => {
   socket.on('disconnect', () => {
     console.log('Disconnected from server');
   });
+
+  listenersAttached = true;
 };

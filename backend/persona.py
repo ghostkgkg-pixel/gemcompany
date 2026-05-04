@@ -12,15 +12,24 @@ class PersonaManager:
         """
         prompt = (
             f"Analyze the following persona description: \"{description}\".\n"
-            f"1. Extract the name (if provided, e.g., 'Aria') or generate a fitting name if not.\n"
-            f"2. Assign scores (1-10) for Intelligence, Creativity, Efficiency, and Social.\n"
-            "Return ONLY a JSON object with keys: 'Name', 'Intelligence', 'Creativity', 'Efficiency', 'Social'."
+            f"1. Name: Extract the name if provided. If not, generate a very natural and fitting name. "
+            f"If the description is in Korean, generate a Korean name. If English, generate an English name.\n"
+            f"2. Scores: Assign scores (1-10) for Intelligence, Creativity, Efficiency, and Social.\n"
+            "Return ONLY a JSON object with keys: 'Name', 'Intelligence', 'Creativity', 'Efficiency', 'Social'. "
+            "Ensure 'Name' is a clean string without any quotes or special characters."
         )
         try:
             result = self.connector.send_prompt_json(prompt)
             # Basic validation and sanitization
+            raw_name = result.get("Name", "Unknown Agent")
+            # If name is a list or dict, extract first string or value
+            if isinstance(raw_name, list) and len(raw_name) > 0:
+                raw_name = str(raw_name[0])
+            elif isinstance(raw_name, dict):
+                raw_name = str(next(iter(raw_name.values())))
+            
             sanitized_result = {
-                "Name": result.get("Name", "Unknown Agent")
+                "Name": str(raw_name).strip()
             }
             for key in self.stats_keys:
                 val = result.get(key, 5)
@@ -32,7 +41,9 @@ class PersonaManager:
         except Exception as e:
             # Fallback in case of AI failure
             print(f"Error analyzing persona: {e}")
-            return {key: 5 for key in self.stats_keys}
+            fallback = {key: 5 for key in self.stats_keys}
+            fallback["Name"] = "신입 요원"
+            return fallback
 
     def recommend_tools(self, stats: dict) -> list:
         """

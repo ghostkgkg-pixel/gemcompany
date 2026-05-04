@@ -1,0 +1,60 @@
+{
+  "agents": {
+    "acaa9875": {
+      "preferred_skills": [],
+      "allowed_skills": [
+        "feature_spec_write",
+        "document_write",
+        "bug_fix",
+        "code_review",
+        "research_summary",
+        "marketing_copy",
+        "code_generation"
+      ],
+      "success_counts": {
+        "code_review": 1
+      },
+      "failure_counts": {},
+      "current_task": null,
+      "recent_results": [
+        "코드베이스를 찾을 수 없으므로 검토할 수 없습니다. (code_review.md)"
+      ],
+      "recent_failures": [],
+      "history": [
+        {
+          "kind": "queued",
+          "task": {
+            "task_id": "735776cc",
+            "task_type": "code_review",
+            "skill_id": "code_review",
+            "summary": "please review this codebase and write a short summary file",
+            "status": "in_progress",
+            "started_at": 1777910188.5409133
+          }
+        },
+        {
+          "kind": "completed",
+          "task": {
+            "task_id": "735776cc",
+            "task_type": "code_review",
+            "skill_id": "code_review",
+            "summary": "please review this codebase and write a short summary file",
+            "status": "in_progress",
+            "started_at": 1777910188.5409133
+          },
+          "result": "코드베이스를 찾을 수 없으므로 검토할 수 없습니다. (code_review.md)"
+        }
+      ]
+    },
+    "9cfa3bc0": {
+      "preferred_skills": [],
+      "allowed_skills": [],
+      "success_counts": {},
+      "failure_counts": {},
+      "current_task": null,
+      "recent_results": [],
+      "recent_failures": [],
+      "history": []
+    }
+  }
+}
