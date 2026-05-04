@@ -15,50 +15,38 @@ class GeminiConnector:
             self.fallback_binary = None
 
     def _execute(self, args, input_data=None):
-        try:
-            if "-m" not in args:
-                args = ["-m", "gemini-2.5-flash"] + args
-            
-            # Try to be robust with encoding. On Windows, the CLI might output CP949 or UTF-8.
-            # We try UTF-8 first, then fallback.
-            result = subprocess.run(
-                [self.binary] + args,
-                input=input_data,
-                capture_output=True,
-                text=False, # Use bytes to manually decode
-                check=True
+        if "-m" not in args:
+            args = ["-m", "gemini-2.5-flash"] + args
+
+        def run_with_binary(binary):
+            # Using Popen to allow future real-time streaming capabilities
+            process = subprocess.Popen(
+                [binary] + args,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
             )
+            stdout_bytes, stderr_bytes = process.communicate(input=input_data)
             
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    process.returncode, 
+                    [binary] + args, 
+                    output=stdout_bytes, 
+                    stderr=stderr_bytes
+                )
+                
             try:
-                return result.stdout.decode('utf-8')
+                return stdout_bytes.decode('utf-8')
             except UnicodeDecodeError:
-                return result.stdout.decode('cp949', errors='replace')
-        except UnicodeDecodeError:
-            # Fallback for Windows CP949 if UTF-8 fails
-            result = subprocess.run(
-                [self.binary] + args,
-                input=input_data,
-                capture_output=True,
-                text=True,
-                check=True,
-                encoding='cp949',
-                errors='replace'
-            )
-            return result.stdout
+                return stdout_bytes.decode('cp949', errors='replace')
+
+        try:
+            return run_with_binary(self.binary)
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             if self.fallback_binary and self.binary != self.fallback_binary:
                 try:
-                    result = subprocess.run(
-                        [self.fallback_binary] + args,
-                        input=input_data,
-                        capture_output=True,
-                        text=False,
-                        check=True
-                    )
-                    try:
-                        return result.stdout.decode('utf-8')
-                    except UnicodeDecodeError:
-                        return result.stdout.decode('cp949', errors='replace')
+                    return run_with_binary(self.fallback_binary)
                 except Exception as e2:
                     raise e2
             raise e
