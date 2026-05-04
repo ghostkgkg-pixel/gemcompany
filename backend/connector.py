@@ -67,39 +67,52 @@ class GeminiConnector:
         # Encode input as UTF-8 bytes for stdin
         stdout = self._execute(["-p", ""], input_data=prompt.encode('utf-8'))
         
-        # Comprehensive cleanup of CLI noise
-        lines = stdout.splitlines()
-        clean_lines = []
-        noise_keywords = ["detected", "experience", "Ripgrep", "MCP issues"]
+        # Surgical removal of known CLI noise patterns
+        patterns = [
+            r"^Warning:.*$",
+            r"^Error:.*$",
+            r"^INFO:.*$",
+            r"^MCP issues detected.*$",
+            r"^Ripgrep is not available.*$",
+            r"^256-color support not detected.*$"
+        ]
         
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            # Skip lines that look like warnings or system messages
-            if any(stripped.startswith(prefix) for prefix in ["Warning:", "Error:", "INFO:"]):
-                continue
-            if any(keyword in stripped for keyword in noise_keywords):
-                continue
-            clean_lines.append(line)
+        cleaned = stdout
+        for pattern in patterns:
+            cleaned = re.sub(pattern, "", cleaned, flags=re.MULTILINE | re.IGNORECASE)
         
-        return "\n".join(clean_lines).strip()
+        return cleaned.strip()
 
     def send_prompt_json(self, prompt: str) -> dict:
         # Encode input as UTF-8 bytes for stdin
         stdout = self._execute(["-p", ""], input_data=prompt.encode('utf-8'))
-        # Find JSON block
-        json_match = re.search(r'(\{.*\}|\[.*\])', stdout, re.DOTALL)
+        
+        # 1. Try to find markdown JSON block first (most reliable)
+        md_match = re.search(r'```json\s*(\{.*\}|\[.*\])\s*```', stdout, re.DOTALL)
+        if md_match:
+            try:
+                res = json.loads(md_match.group(1))
+                if isinstance(res, dict): return res
+            except json.JSONDecodeError:
+                pass
+        
+        # 2. Try to find any JSON-like block in cleaned output
+        cleaned = self.send_prompt(prompt)
+        # Try greedy match first
+        json_match = re.search(r'(\{.*\}|\[.*\])', cleaned, re.DOTALL)
         if json_match:
             try:
-                return json.loads(json_match.group(1))
+                res = json.loads(json_match.group(1))
+                if isinstance(res, dict): return res
             except json.JSONDecodeError:
-                raise ValueError(f"Failed to parse JSON from response: {stdout}")
-        else:
-            # Try parsing the whole thing if no block markers found
-            try:
-                # Remove warnings first
-                cleaned = self.send_prompt(prompt)
-                return json.loads(cleaned)
-            except json.JSONDecodeError:
-                raise ValueError(f"No valid JSON found in response: {stdout}")
+                # If greedy fails, try non-greedy candidates
+                candidates = re.findall(r'(\{.*?\}|\[.*?\])', cleaned, re.DOTALL)
+                for cand in candidates:
+                    try:
+                        res = json.loads(cand)
+                        if isinstance(res, dict): return res
+                    except json.JSONDecodeError:
+                        continue
+        
+        # Fallback: if no dict found, but we have a valid response, return as thought
+        return {"thought": cleaned, "speech": "시스템 응답을 해석하는 데 문제가 발생했습니다.", "action": "Idle"}

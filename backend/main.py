@@ -148,6 +148,9 @@ def load_state():
 
 # --- Agent Processing ---
 async def process_agent_response(agent, response_data):
+    if not isinstance(response_data, dict):
+        response_data = {"thought": str(response_data), "speech": "응답을 해석할 수 없습니다.", "action": "Idle"}
+    
     m = current_map or MAP_TEMPLATES["standard_office"]
     agent.current_thought = response_data.get("thought", "")
     agent.current_speech = response_data.get("speech", "")
