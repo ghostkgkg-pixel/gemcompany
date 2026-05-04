@@ -357,6 +357,13 @@ async def save_map(name: str):
         return {"message": f"Map '{name}' saved successfully"}
     raise HTTPException(status_code=400, detail="No map to save")
 
+@app.get("/map/templates")
+async def get_map_templates():
+    return {
+        "defaults": MAP_TEMPLATES,
+        "saved": USER_SAVED_MAPS
+    }
+
 @app.get("/")
 async def root():
     return {"status": "Running"}
