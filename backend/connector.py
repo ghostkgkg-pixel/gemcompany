@@ -17,19 +17,22 @@ class GeminiConnector:
     def _execute(self, args, input_data=None):
         try:
             if "-m" not in args:
-                args = ["-m", "gemini-3.1-pro-preview"] + args
+                args = ["-m", "gemini-2.5-flash"] + args
             
-            # Use shell=True only if necessary, but here we try to be robust with encoding
+            # Try to be robust with encoding. On Windows, the CLI might output CP949 or UTF-8.
+            # We try UTF-8 first, then fallback.
             result = subprocess.run(
                 [self.binary] + args,
                 input=input_data,
                 capture_output=True,
-                text=True,
-                check=True,
-                encoding='utf-8', # Default to UTF-8
-                errors='replace'   # Don't crash on decoding errors
+                text=False, # Use bytes to manually decode
+                check=True
             )
-            return result.stdout
+            
+            try:
+                return result.stdout.decode('utf-8')
+            except UnicodeDecodeError:
+                return result.stdout.decode('cp949', errors='replace')
         except UnicodeDecodeError:
             # Fallback for Windows CP949 if UTF-8 fails
             result = subprocess.run(
@@ -44,37 +47,25 @@ class GeminiConnector:
             return result.stdout
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             if self.fallback_binary and self.binary != self.fallback_binary:
-                # Same logic for fallback binary
                 try:
                     result = subprocess.run(
                         [self.fallback_binary] + args,
                         input=input_data,
                         capture_output=True,
-                        text=True,
-                        check=True,
-                        encoding='utf-8',
-                        errors='replace'
+                        text=False,
+                        check=True
                     )
-                    return result.stdout
-                except UnicodeDecodeError:
-                    result = subprocess.run(
-                        [self.fallback_binary] + args,
-                        input=input_data,
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                        encoding='cp949',
-                        errors='replace'
-                    )
-                    return result.stdout
+                    try:
+                        return result.stdout.decode('utf-8')
+                    except UnicodeDecodeError:
+                        return result.stdout.decode('cp949', errors='replace')
                 except Exception as e2:
                     raise e2
             raise e
 
     def send_prompt(self, prompt: str) -> str:
-        # Use -p "" and send the actual prompt via stdin to avoid Windows command line encoding issues.
-        # This is the most robust way to handle non-ASCII characters on Windows CLI.
-        stdout = self._execute(["-p", ""], input_data=prompt)
+        # Encode input as UTF-8 bytes for stdin
+        stdout = self._execute(["-p", ""], input_data=prompt.encode('utf-8'))
         # Clean up output - remove common agent warnings if they leaked to stdout
         # We use regex to remove them surgically as they might be on the same line as the response
         markers = [
@@ -89,8 +80,8 @@ class GeminiConnector:
         return clean_stdout.strip()
 
     def send_prompt_json(self, prompt: str) -> dict:
-        # Use -p "" and send the actual prompt via stdin to avoid Windows command line encoding issues.
-        stdout = self._execute(["-p", ""], input_data=prompt)
+        # Encode input as UTF-8 bytes for stdin
+        stdout = self._execute(["-p", ""], input_data=prompt.encode('utf-8'))
         # Find JSON block
         json_match = re.search(r'(\{.*\}|\[.*\])', stdout, re.DOTALL)
         if json_match:
