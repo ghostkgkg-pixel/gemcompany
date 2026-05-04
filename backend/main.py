@@ -287,6 +287,37 @@ async def get_current_map():
 async def list_agents():
     return list(agents.values())
 
+@app.post("/map/select/{map_id}")
+async def select_map(map_id: str):
+    global current_map
+    if map_id in MAP_TEMPLATES:
+        current_map = MAP_TEMPLATES[map_id]
+    elif map_id in USER_SAVED_MAPS:
+        current_map = USER_SAVED_MAPS[map_id]
+    else:
+        raise HTTPException(status_code=404, detail="Map not found")
+    await broadcast_map(current_map.model_dump())
+    save_state()
+    return current_map
+
+@app.post("/agents/spawn")
+async def spawn_agent(description: str):
+    pm = PersonaManager()
+    persona_data = pm.analyze_persona(description)
+    agent_id = str(uuid.uuid4())[:8]
+    m = current_map or MAP_TEMPLATES["standard_office"]
+    new_agent = Agent(
+        id=agent_id, name=persona_data.get("Name", "New Agent"), persona=persona_data, 
+        stats={k: v for k, v in persona_data.items() if k != "Name"},
+        x=random.randint(0, m.width-1), y=random.randint(0, m.height-1), 
+        current_action="Idle", current_thought="Just spawned!", current_speech="안녕하세요!",
+        appearance={"body": "body_light", "hair_style": "hair_short", "hair_color": "#4B2C20", "outfit": "agent_dev", "gender": "male"}
+    )
+    agents[agent_id] = new_agent
+    await broadcast_agents()
+    save_state()
+    return new_agent
+
 @app.post("/agents/hire")
 async def hire_agent(name: str, job: str, persona: str, body: str, hair_style: str, hair_color: str, outfit: str, gender: str = "male"):
     pm = PersonaManager()
