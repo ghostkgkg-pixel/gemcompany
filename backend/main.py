@@ -20,6 +20,7 @@ from connector import GeminiConnector
 from persona import PersonaManager
 from skill_system import FAST_MODEL, SkillRegistry, SkillRouter, TaskClassifier
 from work_memory import WorkMemoryManager
+from memory_graph.engine import KnowledgeGraphEngine
 
 
 @dataclass(order=True)
@@ -119,6 +120,8 @@ skill_registry = SkillRegistry(SKILLS_DIR)
 task_classifier = TaskClassifier()
 skill_router = SkillRouter(skill_registry)
 work_memory = WorkMemoryManager(WORK_MEMORY_FILE)
+graph_db_path = os.path.join(BASE_DIR, "knowledge_graph.db")
+graph_engine = KnowledgeGraphEngine(graph_db_path)
 
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 sio_app = socketio.ASGIApp(sio)
@@ -366,6 +369,19 @@ async def process_agent_response(agent: Agent, response_data: Dict[str, Any], cl
         work_memory.complete_task(agent.id, cli_task.task_id, work_result or "작업 완료", file_name=file_name)
 
     hydrate_agent_runtime(agent)
+    
+    # Record work in knowledge graph (Approved Phase 6 Plan)
+    graph_engine.record_entity(agent.id, "agent", agent.name, {"role": agent.persona.get("Job", "직원")})
+    if file_name:
+        file_id = f"file_{file_name}"
+        graph_engine.record_entity(file_id, "file", file_name, {"path": f"work_outputs/{file_name}"})
+        graph_engine.record_relation(agent.id, file_id, "CREATED_BY")
+        
+        # Collaborative observation
+        for other_id, other_agent in agents.items():
+            if other_id != agent.id:
+                graph_engine.record_relation(other_id, file_id, "OBSERVED")
+
     await broadcast_agents()
     save_state()
 
@@ -588,6 +604,11 @@ async def chat_with_agent(agent_id: str, message: str):
 @app.get("/map/current")
 async def get_current_map():
     return current_map or MAP_TEMPLATES["standard_office"]
+
+
+@app.get("/graph/data")
+async def get_graph_data():
+    return graph_engine.get_graph_data().model_dump()
 
 
 @app.get("/agents")

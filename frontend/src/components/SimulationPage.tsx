@@ -3,7 +3,8 @@ import { GameCanvas } from './GameCanvas';
 import { useGameStore } from '../store/useGameStore';
 import { getMapCurrent, moveAgent, chatWithAgent } from '../services/api';
 import { initSocket } from '../services/socket';
-import { Users, Map as MapIcon, Navigation, MessageCircle } from 'lucide-react';
+import { Users, Map as MapIcon, Navigation, MessageCircle, Share2 } from 'lucide-react';
+import { KnowledgeGraph } from './GraphView/KnowledgeGraph';
 import { LogOut } from 'lucide-react';
 
 interface SimulationPageProps {
@@ -23,6 +24,7 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [showGraph, setShowGraph] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -166,6 +168,20 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
           >
             퇴근하기 (로비)
           </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setShowGraph(true)}
+              className="px-4 py-1 bg-blue-500 border-2 border-black hover:bg-blue-600 text-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none flex items-center gap-2"
+            >
+              <Share2 size={18} /> 지식 그래프
+            </button>
+            <button 
+              onClick={onGoBack}
+              className="px-4 py-1 bg-red-400 border-2 border-black hover:bg-red-500 text-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none"
+            >
+              퇴근하기 (로비)
+            </button>
+          </div>
         </header>
 
         {/* Game Canvas Container */}
@@ -257,6 +273,11 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
         </div>
 
       </main>
+
+      {/* Knowledge Graph Overlay */}
+      {showGraph && (
+        <KnowledgeGraph onClose={() => setShowGraph(false)} />
+      )}
     </div>
   );
 }

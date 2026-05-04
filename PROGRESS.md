@@ -23,6 +23,9 @@
 | **Phase 5** | **자율 협업 루프 (Autonomous Loop)** | ✅ 완료 | 성과 파일 생성 및 상태 영구 저장 구현 |
 | - Test 14 | 에이전트 상태 영구 저장 (Persistence) | ✅ 성공 | JSON 기반 상태 저장 및 로드 |
 | - Test 15 | 자율 작업 및 물리적 파일 생성 | ✅ 성공 | work_outputs/ 내 실제 파일 생성 연동 |
+| **Phase 6** | **지식 그래프 및 메모리 (Gem-Graph-Memory)** | ✅ 완료 | Obsidian + Memento 스타일 융합 시스템 |
+| - Test 16 | 엔티티-관계 기반 그래프 DB 구축 | ✅ 성공 | SQLite 기반 지식 그래프 엔진 구현 |
+| - Test 17 | 실시간 인터랙티브 그래프 시각화 | ✅ 성공 | React-Force-Graph 연동 및 UI 최적화 |
 
 ---
 

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gem-Graph-Memory 구축 계획서</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --bg: #f8fafc;
+            --text: #1e293b;
+            --border: #e2e8f0;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background-color: var(--bg);
+            margin: 0;
+            padding: 40px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+        h1 { font-size: 2.5rem; color: #0f172a; margin-bottom: 8px; border-bottom: 4px solid var(--primary); display: inline-block; }
+        h2 { font-size: 1.8rem; margin-top: 40px; color: #334155; border-left: 6px solid var(--primary); padding-left: 15px; }
+        .mermaid { background: #fff; border: 1px solid var(--border); padding: 20px; border-radius: 8px; margin: 20px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background-color: #f1f5f9; font-weight: bold; }
+        .step { margin-bottom: 24px; padding: 20px; background: #f1f5f9; border-radius: 8px; }
+        .step h3 { margin-top: 0; color: var(--primary); }
+        code { font-family: 'JetBrains Mono', monospace; background: #e2e8f0; padding: 2px 4px; border-radius: 4px; }
+        .important { background: #fef2f2; border-left: 6px solid #ef4444; padding: 20px; margin-top: 40px; }
+    </style>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Gem-Graph-Memory 구축 계획서</h1>
+        <p>Obsidian의 시각적 연결과 Memento의 구조적 기억 시스템을 융합한 설계안</p>
+
+        <h2>1. 시스템 아키텍처 시각화</h2>
+        <div class="mermaid">
+            graph TD
+                subgraph "Frontend (Obsidian Style)"
+                    UI[Phaser Office Map]
+                    GV[Interactive Graph View]
+                    LD[Knowledge Detail Panel]
+                end
+
+                subgraph "Backend (Memento Style)"
+                    GE[Graph Engine]
+                    DB[(SQLite Graph DB)]
+                    KC[Knowledge Classifier]
+                end
+
+                subgraph "Agent Loop"
+                    AG[Agent]
+                    CL[Gemini CLI]
+                end
+
+                AG -->|작업 완료| GE
+                GE -->|데이터 저장| DB
+                DB -->|데이터 조회| GE
+                GE -->|그래프 데이터| GV
+                GV -->|노드 클릭| LD
+                AG <-->|기억 참조| DB
+        </div>
+
+        <h2>2. 핵심 데이터 모델</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>구분</th>
+                    <th>종류 (Type)</th>
+                    <th>설명</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Entity (노드)</strong></td>
+                    <td>Agent, File, Concept, Task</td>
+                    <td>에이전트 자신, 생성된 파일, 주요 지식 개념 등</td>
+                </tr>
+                <tr>
+                    <td><strong>Relation (선)</strong></td>
+                    <td>CREATED_BY, REFERENCES, OBSERVED</td>
+                    <td>생성자, 참조 문서, 관찰 관계 등</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>3. 주요 단계별 실행 계획</h2>
+        
+        <div class="step">
+            <h3>Step 1: 백엔드 지식 엔진 구축</h3>
+            <p>위치: <code>backend/memory_graph/</code></p>
+            <ul>
+                <li>SQLite를 사용하여 모든 작업 결과물을 노드와 선으로 연결하여 저장.</li>
+                <li>에이전트가 "저번에 했던 방식"을 그래프에서 직접 쿼리하여 찾아낼 수 있게 구현.</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: 프론트엔드 인터랙티브 그래프 개발</h3>
+            <p>라이브러리: <code>react-force-graph-2d</code></p>
+            <ul>
+                <li>에이전트들의 지식이 팽창하는 모습을 실시간 별자리 형태로 시각화.</li>
+                <li>서비스 특유의 레트로/픽셀 아트 스타일을 유지한 지식 맵 구현.</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: 에이전트 의사결정 루프 통합</h3>
+            <ul>
+                <li>새 작업을 시작할 때 지식 그래프를 먼저 '조회'하도록 프롬프트 구조 개선.</li>
+                <li>에이전트 간 협업 이력이 그래프에 기록되어 상호 지식 활용 가능.</li>
+            </ul>
+        </div>
+
+        <div class="important">
+            <strong>중요 사항:</strong> 이 시스템은 기존 코드의 안정성을 위해 신규 독립 폴더에서 개발된 후 최종 단계에서 통합됩니다.
+        </div>
+    </div>
+</body>
+</html>

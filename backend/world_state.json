@@ -17,13 +17,13 @@
         "Social": 5
       },
       "x": 3,
-      "y": 7,
-      "target_x": null,
-      "target_y": null,
+      "y": 2,
+      "target_x": 3,
+      "target_y": 2,
       "path": [],
-      "current_action": "Idle",
-      "current_thought": "Waiting for the next meaningful task.",
-      "current_speech": "직원 관점에서 다음 작업을 준비 중이에요.",
+      "current_action": "Moving to Meeting Room",
+      "current_thought": "Doing a lightweight patrol.",
+      "current_speech": "Meeting Room 쪽 상황을 보고 올게요.",
       "appearance": {
         "body": "body_light",
         "hair_style": "hair_spiky",
@@ -44,7 +44,7 @@
         "[00:56] TASK:code_review|please review this codebase and write a short summary file",
         "[00:56] FILE:code_review.md|코드베이스를 찾을 수 없으므로 검토할 수 없습니다."
       ],
-      "last_action_time": 1777931308.7077334,
+      "last_action_time": 1777933628.7222493,
       "skill_profile": {
         "preferred_skills": [],
         "allowed_skills": [
@@ -81,18 +81,13 @@
         "Social": 5
       },
       "x": 3,
-      "y": 6,
-      "target_x": 3,
-      "target_y": 7,
-      "path": [
-        [
-          3,
-          7
-        ]
-      ],
-      "current_action": "Moving to Break Area",
+      "y": 2,
+      "target_x": 16,
+      "target_y": 5,
+      "path": [],
+      "current_action": "Moving to Work Zone",
       "current_thought": "Doing a lightweight patrol.",
-      "current_speech": "Break Area 쪽 상황을 보고 올게요.",
+      "current_speech": "Work Zone 쪽 상황을 보고 올게요.",
       "appearance": {
         "body": "body_light",
         "hair_style": "none",
@@ -111,7 +106,7 @@
         "[23:58] 프로젝트 디렉토리가 비어 있음을 확인했습니다.",
         "[23:59] 프로젝트 상태 확인 완료. 작업 대기 중."
       ],
-      "last_action_time": 1777931300.7057326,
+      "last_action_time": 1777933636.7207494,
       "skill_profile": {
         "preferred_skills": [],
         "allowed_skills": [],
