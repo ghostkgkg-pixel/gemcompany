@@ -16,7 +16,7 @@ class GeminiConnector:
 
     def _execute(self, args, input_data=None):
         if "-m" not in args:
-            args = ["-m", "gemini-2.5-flash"] + args
+            args = ["-m", "gemini-3.1-pro-preview"] + args
 
         def run_with_binary(binary):
             # Using Popen to allow future real-time streaming capabilities

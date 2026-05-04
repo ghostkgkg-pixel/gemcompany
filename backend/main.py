@@ -159,7 +159,7 @@ async def process_agent_response(agent, response_data):
     work_result = response_data.get("work_result")
     if work_result:
         file_out = response_data.get("file_output")
-        if file_out and file_out.get("name") and file_out.get("content"):
+        if isinstance(file_out, dict) and file_out.get("name") and file_out.get("content"):
             f_name = "".join(c for c in file_out["name"] if c.isalnum() or c in "._-").strip()
             if f_name:
                 f_path = os.path.join(OUTPUT_DIR, f_name)
@@ -170,7 +170,10 @@ async def process_agent_response(agent, response_data):
         agent.work_history.append(f"[{time.strftime('%H:%M')}] {work_result}")
         if len(agent.work_history) > 10: agent.work_history.pop(0)
     
-    action = response_data.get("action", "Idle")
+    action = response_data.get("action")
+    if not action or not isinstance(action, str):
+        action = "Idle"
+        
     if action.startswith("Moving to "):
         target_zone_name = action.replace("Moving to ", "").strip()
         target_zone = next((z for z in m.zones if z.name.lower() == target_zone_name.lower() or any(a.lower() == target_zone_name.lower() for a in z.aliases)), None)
@@ -234,14 +237,15 @@ async def autonomous_decision_loop():
     connector = GeminiConnector()
     loop = asyncio.get_event_loop()
     while True:
-        await asyncio.sleep(5)
+        await asyncio.sleep(15)  # Increased from 5 to 15 to prevent 429 API Rate Limits
         if not agents: continue
         m = current_map or MAP_TEMPLATES["standard_office"]
         now = time.time()
         candidates = [a for a in agents.values() if a.current_action in ["Idle", "Unreachable"] or (now - a.last_action_time > 30)]
         if not candidates: continue
         
-        to_act = random.sample(candidates, min(len(candidates), 3))
+        # Process only 1 agent per loop to avoid hitting rate limits
+        to_act = random.sample(candidates, 1)
         async def act(agent):
             current_zone_name = "Hallway"
             for z in m.zones:
@@ -259,7 +263,9 @@ async def autonomous_decision_loop():
             except Exception as e:
                 print(f"Autonomous error for {agent.name}: {e}")
 
-        await asyncio.gather(*(act(a) for a in to_act))
+        for a in to_act:
+            await act(a)
+            await asyncio.sleep(2) # Stagger requests slightly
 
 # --- API Endpoints ---
 @app.on_event("startup")
