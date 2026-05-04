@@ -17,6 +17,33 @@ from connector import GeminiConnector
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import socketio
+from dataclasses import dataclass, field
+
+# --- CLI Task Queue ---
+@dataclass(order=True)
+class CLITask:
+    priority: int
+    prompt: str = field(compare=False)
+    future: asyncio.Future = field(default_factory=asyncio.Future, compare=False)
+
+cli_queue = asyncio.PriorityQueue()
+
+async def cli_worker():
+    connector = GeminiConnector()
+    loop = asyncio.get_event_loop()
+    while True:
+        task = await cli_queue.get()
+        try:
+            # We use run_in_executor because send_prompt_json is synchronous
+            result = await loop.run_in_executor(None, connector.send_prompt_json, task.prompt)
+            task.future.set_result(result)
+        except Exception as e:
+            if not task.future.done():
+                task.future.set_exception(e)
+        finally:
+            cli_queue.task_done()
+            # Small delay between any two CLI calls to avoid hammering the API
+            await asyncio.sleep(1.5)
 
 # --- Models ---
 class MapZone(BaseModel):
@@ -237,7 +264,7 @@ async def autonomous_decision_loop():
     connector = GeminiConnector()
     loop = asyncio.get_event_loop()
     while True:
-        await asyncio.sleep(15)  # Increased from 5 to 15 to prevent 429 API Rate Limits
+        await asyncio.sleep(60)  # Increased further to 60 to give full bandwidth to user chat
         if not agents: continue
         m = current_map or MAP_TEMPLATES["standard_office"]
         now = time.time()
@@ -257,15 +284,18 @@ async def autonomous_decision_loop():
             zones_info = [f"('{z.name}', {z.aliases})" for z in m.zones]
             
             prompt = f"ROLE: Office AI Agent. PERSONA: {agent.persona}. CONTEXT: ({agent.x}, {agent.y}) in {current_zone_name}. Zones: {zones_info}. Nearby: {nearby_str}. INSTRUCTION: Act. Korean only. JSON {{thought, speech, action, work_result, file_output}}"
+            
+            # Use Priority Queue (Priority 1 for autonomous)
+            task = CLITask(priority=1, prompt=prompt)
+            await cli_queue.put(task)
             try:
-                response_data = await loop.run_in_executor(None, connector.send_prompt_json, prompt)
+                response_data = await task.future
                 await process_agent_response(agent, response_data)
             except Exception as e:
                 print(f"Autonomous error for {agent.name}: {e}")
 
         for a in to_act:
             await act(a)
-            await asyncio.sleep(2) # Stagger requests slightly
 
 # --- API Endpoints ---
 @app.on_event("startup")
@@ -273,16 +303,19 @@ async def startup_event():
     load_state()
     asyncio.create_task(world_tick_loop())
     asyncio.create_task(autonomous_decision_loop())
+    asyncio.create_task(cli_worker())  # Start the CLI task worker
 
 @app.post("/agents/{agent_id}/chat")
 async def chat_with_agent(agent_id: str, message: str):
     if agent_id not in agents: raise HTTPException(status_code=404, detail="Agent not found")
     agent = agents[agent_id]
-    connector = GeminiConnector()
-    loop = asyncio.get_event_loop()
     prompt = f"ROLE: Office AI Agent. PERSONA: {agent.persona}. CONTEXT: ({agent.x}, {agent.y}). USER MESSAGE: \"{message}\". INSTRUCTION: Respond and act. Korean only. JSON {{thought, speech, action, work_result, file_output}}"
+    
+    # Use Priority Queue (Priority 0 for user chat - High Priority)
+    task = CLITask(priority=0, prompt=prompt)
+    await cli_queue.put(task)
     try:
-        response_data = await loop.run_in_executor(None, connector.send_prompt_json, prompt)
+        response_data = await task.future
         await process_agent_response(agent, response_data)
         return agent
     except Exception as e:

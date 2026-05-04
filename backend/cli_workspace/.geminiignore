@@ -1,0 +1,3 @@
+# Ignore everything to prevent CLI from scanning
+*
+!cli_workspace/
