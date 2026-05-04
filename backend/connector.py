@@ -66,18 +66,24 @@ class GeminiConnector:
     def send_prompt(self, prompt: str) -> str:
         # Encode input as UTF-8 bytes for stdin
         stdout = self._execute(["-p", ""], input_data=prompt.encode('utf-8'))
-        # Clean up output - remove common agent warnings if they leaked to stdout
-        # We use regex to remove them surgically as they might be on the same line as the response
-        markers = [
-            r"Warning: Windows 10 detected\..*?best experience\.",
-            r"Ripgrep is not available\..*?GrepTool\.",
-            r"MCP issues detected\..*?status\."
-        ]
-        clean_stdout = stdout
-        for marker in markers:
-            clean_stdout = re.sub(marker, "", clean_stdout, flags=re.DOTALL)
         
-        return clean_stdout.strip()
+        # Comprehensive cleanup of CLI noise
+        lines = stdout.splitlines()
+        clean_lines = []
+        noise_keywords = ["detected", "experience", "Ripgrep", "MCP issues"]
+        
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # Skip lines that look like warnings or system messages
+            if any(stripped.startswith(prefix) for prefix in ["Warning:", "Error:", "INFO:"]):
+                continue
+            if any(keyword in stripped for keyword in noise_keywords):
+                continue
+            clean_lines.append(line)
+        
+        return "\n".join(clean_lines).strip()
 
     def send_prompt_json(self, prompt: str) -> dict:
         # Encode input as UTF-8 bytes for stdin
