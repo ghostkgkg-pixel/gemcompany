@@ -79,8 +79,10 @@ MAP_TEMPLATES = {
 agents: Dict[str, Agent] = {}
 current_map: Optional[MapTemplate] = None
 USER_SAVED_MAPS: Dict[str, MapTemplate] = {}
-STATE_FILE = "world_state.json"
-OUTPUT_DIR = "work_outputs"
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATE_FILE = os.path.join(BASE_DIR, "world_state.json")
+OUTPUT_DIR = os.path.join(BASE_DIR, "work_outputs")
 
 # --- Socket.io Server Setup ---
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
