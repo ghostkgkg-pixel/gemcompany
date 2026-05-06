@@ -1,461 +1,278 @@
 import Phaser from 'phaser';
 import { useGameStore } from '../store/useGameStore';
-import { placeObstacle, removeObstacle, setZoneTile } from '../services/api';
+import { placeObstacle, removeObstacle, setZoneTile, getMapCurrent } from '../services/api';
 
 export class MainScene extends Phaser.Scene {
-  constructor() {
-    super('MainScene');
-  }
+  constructor() { super('MainScene'); }
 
-  private agentSprites: Map<string, { container: Phaser.GameObjects.Container, body: Phaser.GameObjects.Sprite, label: Phaser.GameObjects.Text, bubble: Phaser.GameObjects.Text, status: Phaser.GameObjects.Text }> = new Map();
-
+  private agentSprites: Map<string, { container: Phaser.GameObjects.Container, body: Phaser.GameObjects.Sprite, label: Phaser.GameObjects.Text }> = new Map();
   private unsubscribers: (() => void)[] = [];
-  
+
   private mapContainer!: Phaser.GameObjects.Container;
+  private mapLayer!: Phaser.GameObjects.Container;
   private previewContainer!: Phaser.GameObjects.Container;
   private previewSprite!: Phaser.GameObjects.Sprite;
-  private previewRect!: Phaser.GameObjects.Rectangle;
-  private gridSize: number = 40;
-  preload() {
-    this.load.image('floor_work', 'assets/floor_work.png');
-    this.load.image('floor_meeting', 'assets/floor_meeting.png');
-    this.load.image('floor_break', 'assets/floor_break.png');
-    this.load.image('obstacle_desk', 'assets/obstacle_desk.png');
-    this.load.image('obstacle_table', 'assets/obstacle_table.png');
-    this.load.image('obstacle_plant', 'assets/obstacle_plant.png');
-    
-    this.load.image('agent_dev', 'assets/agent_dev.png');
-    this.load.image('agent_design', 'assets/agent_design.png');
-    this.load.image('agent_manage', 'assets/agent_manage.png');
-    this.load.image('agent_market', 'assets/agent_market.png');
+  private previewRect!: Phaser.GameObjects.Graphics;
+  private selectionRect!: Phaser.GameObjects.Graphics;
+  private dragStart: { x: number, y: number } | null = null;
 
-    this.load.image('body_light', 'assets/body_light.png');
-    this.load.image('body_tan', 'assets/body_tan.png');
-    this.load.image('body_dark', 'assets/body_dark.png');
-    this.load.image('hair_black_short', 'assets/hair_black_short.png');
-    this.load.image('hair_brown_long', 'assets/hair_brown_long.png');
-    
-    // Fallback original agent
-    this.load.image('agent', 'assets/agent.png');
+  private tileWidth: number = 160;
+  private tileHeight: number = 80;
+
+  preload() {
+    this.load.spritesheet('floor_sheet', 'assets/floor_sheet.png', { frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('furniture_sheet', 'assets/furniture_sheet.png', { frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('agent_sheet', 'assets/agent_sheet.png', { frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('walls_sheet', 'assets/walls_sheet.png', { frameWidth: 256, frameHeight: 256 });
+
+    this.load.on('complete', () => {
+      ['floor_sheet', 'furniture_sheet', 'agent_sheet', 'walls_sheet'].forEach(key => {
+        const texture = this.textures.get(key);
+        const source = texture.getSourceImage() as HTMLImageElement;
+        const canvas = document.createElement('canvas');
+        canvas.width = source.width; canvas.height = source.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(source, 0, 0);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            const isBlack = data[i] < 20 && data[i + 1] < 20 && data[i + 2] < 20;
+            const isWhite = data[i] > 240 && data[i + 1] > 240 && data[i + 2] > 240;
+            if (isBlack || isWhite) data[i + 3] = 0;
+          }
+          ctx.putImageData(imageData, 0, 0);
+          this.textures.remove(key);
+          this.textures.addSpriteSheet(key, canvas, { frameWidth: 256, frameHeight: 256 });
+        }
+      });
+    });
   }
 
-    create() {
+  create() {
+    this.cameras.main.setBackgroundColor('#05080f');
     this.mapContainer = this.add.container(0, 0);
+    this.mapLayer = this.add.container(0, 0);
+    this.mapContainer.add(this.mapLayer);
 
-    // Generate Hair Textures Procedurally
-    const hairStyles = [
-        { key: 'hair_short', draw: (g: Phaser.GameObjects.Graphics) => {
-            g.fillStyle(0xffffff);
-            g.fillRect(-10, -15, 20, 10); // Top cap
-        }},
-        { key: 'hair_long', draw: (g: Phaser.GameObjects.Graphics) => {
-            g.fillStyle(0xffffff);
-            g.fillRect(-10, -15, 20, 10); // Top cap
-            g.fillRect(-12, -10, 4, 15); // Left long
-            g.fillRect(8, -10, 4, 15); // Right long
-        }},
-        { key: 'hair_spiky', draw: (g: Phaser.GameObjects.Graphics) => {
-            g.fillStyle(0xffffff);
-            g.fillTriangle(-10, -10, 0, -20, 10, -10); // Spikes
-            g.fillRect(-10, -12, 20, 6);
-        }}
-    ];
-
-    hairStyles.forEach(style => {
-        const g = this.make.graphics({ x: 0, y: 0, add: false });
-        style.draw(g);
-        g.generateTexture(style.key, 32, 32);
-    });
-
-    // Base body (just a circle or simple shape for now if no base PNG)
-    const bodyG = this.make.graphics({ x: 0, y: 0, add: false });
-    bodyG.fillStyle(0xffffff);
-    bodyG.fillCircle(16, 16, 12); // Head/Body base
-    bodyG.generateTexture('char_base', 32, 32);
-    
-    // Build Preview Container (Ghost)
-    this.previewContainer = this.add.container(0, 0).setAlpha(0.6).setDepth(1000).setVisible(false);
-    this.previewSprite = this.add.sprite(0, 0, 'obstacle_desk').setOrigin(0.5, 0.5);
-    this.previewRect = this.add.rectangle(0, 0, 40, 40, 0xffffff, 0.5).setOrigin(0.5, 0.5);
+    this.previewContainer = this.add.container(0, 0).setAlpha(0.6).setDepth(10000).setVisible(false);
+    this.previewSprite = this.add.sprite(0, 0, 'furniture_sheet', 0).setOrigin(0.5, 0.78);
+    this.previewRect = this.add.graphics();
     this.previewContainer.add([this.previewRect, this.previewSprite]);
+    this.mapContainer.add(this.previewContainer);
 
-    // INTERACTIVE MAP EDITOR: Click to toggle obstacle
-    this.input.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
-        const { currentMap, buildMode, selectedTool } = useGameStore.getState();
-        if (!buildMode) return;
+    this.selectionRect = this.add.graphics().setDepth(11000);
+    this.mapContainer.add(this.selectionRect);
 
-        // Adjust pointer coordinates relative to mapContainer
-        const mapX = pointer.x - this.mapContainer.x;
-        const mapY = pointer.y - this.mapContainer.y;
-        
-        const x = Math.floor(mapX / this.gridSize);
-        const y = Math.floor(mapY / this.gridSize);
-        
-        if (currentMap && x >= 0 && x < currentMap.width && y >= 0 && y < currentMap.height) {
-            console.log(`Placement request: ${x}, ${y}, ${selectedTool}`);
-            try {
-                if (selectedTool === 'eraser') {
-                    await removeObstacle(x, y);
-                } else if (selectedTool.startsWith('zone_')) {
-                    const zoneType = selectedTool.replace('zone_', '');
-                    await setZoneTile(x, y, zoneType);
-                } else {
-                    const { selectedRotation, selectedFlipX } = useGameStore.getState();
-                    await placeObstacle(x, y, selectedTool, selectedRotation, selectedFlipX);
-                }
-                
-                // Optimistic/Force sync: Although subscription handles it, manual sync ensures immediate feedback
-                const updatedMap = useGameStore.getState().currentMap;
-                if (updatedMap) this.syncMap(updatedMap);
-            } catch (error) {
-                console.error("Failed to update tile:", error);
-            }
-        } else {
-            console.log(`Click out of bounds or map missing: ${x}, ${y}`);
-        }
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (p.button !== 0) return;
+      const { buildMode } = useGameStore.getState();
+      if (buildMode) this.dragStart = this.worldToCart(p.worldX, p.worldY);
     });
 
-    // Initial Render
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      if (p.button !== 0 || !this.dragStart) return;
+      this.handleMapAction(this.dragStart, this.worldToCart(p.worldX, p.worldY));
+      this.dragStart = null;
+      this.selectionRect.clear();
+    });
+
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (p.isDown && (p.button === 1 || p.button === 2)) {
+        this.cameras.main.scrollX -= (p.x - p.prevPosition.x) / this.cameras.main.zoom;
+        this.cameras.main.scrollY -= (p.y - p.prevPosition.y) / this.cameras.main.zoom;
+        return;
+      }
+      const { buildMode } = useGameStore.getState();
+      if (buildMode) this.updatePreview(p);
+    });
+
+    this.setupSubscriptions();
+    this.input.mouse?.disableContextMenu();
+    this.cameras.main.setZoom(0.6);
+
+    this.input.on('wheel', (p: any, go: any, dx: number, dy: number) => {
+      this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom - dy * 0.001, 0.3, 2.0));
+    });
+
+    this.scale.on('resize', () => {
+      const { currentMap } = useGameStore.getState();
+      if (currentMap) this.syncMap(currentMap);
+    });
+
     const { currentMap } = useGameStore.getState();
     if (currentMap) this.syncMap(currentMap);
-    
-    // Subscribe to store for agent updates safely
-    this.unsubscribers.push(
-      useGameStore.subscribe(
-        (state) => state.agents,
-        (agents) => {
-          if (this.scene && this.sys && this.sys.game) {
-            this.syncAgents(agents);
-          }
-        }
-      )
-    );
-
-    // Also subscribe to map updates
-    this.unsubscribers.push(
-      useGameStore.subscribe(
-        (state) => state.currentMap,
-        (newMap) => {
-          if (newMap && this.scene && this.sys && this.sys.game) {
-            this.syncMap(newMap);
-          }
-        }
-      )
-    );
-
-    // Cleanup when scene is shut down
-    this.events.on('shutdown', () => {
-      this.unsubscribers.forEach(unsub => unsub());
-      this.unsubscribers = [];
-    });
   }
 
-    private syncMap(data: any) {
-        if (!this.sys || !this.sys.game || !this.sys.game.canvas) return;
-        this.mapContainer.removeAll(true);
-        
-        // Dynamically calculate grid size to fit the screen while keeping squares
-        const canvasW = this.sys.game.canvas.width;
-        const canvasH = this.sys.game.canvas.height;
-        
-        // Calculate the maximum grid size that fits
-        const sizeX = Math.floor(canvasW / data.width);
-        const sizeY = Math.floor(canvasH / data.height);
-        this.gridSize = Math.min(sizeX, sizeY);
-        
-        // Center the map in the remaining space
-        const mapPixelWidth = data.width * this.gridSize;
-        const mapPixelHeight = data.height * this.gridSize;
-        const offsetX = Math.floor((canvasW - mapPixelWidth) / 2);
-        const offsetY = Math.floor((canvasH - mapPixelHeight) / 2);
-        
-        this.mapContainer.setPosition(offsetX, offsetY);
+  private setupSubscriptions() {
+    this.unsubscribers.push(
+      useGameStore.subscribe((s) => s.agents, (a) => this.syncAgents(a)),
+      useGameStore.subscribe((s) => s.currentMap, (m) => m && this.syncMap(m))
+    );
+  }
 
-        // Draw Floor Tiles dynamically based on zones
-        for (let i = 0; i < data.width; i++) {
-            for (let j = 0; j < data.height; j++) {
-                let zoneAlias = 'work';
-                
-                // Use tile-based zone_data if available, otherwise fallback to rectangles
-                if (data.zone_data && data.zone_data[j] && data.zone_data[j][i]) {
-                    zoneAlias = data.zone_data[j][i];
-                } else if (data.zones) {
-                    const zone = data.zones.find((z:any) => i >= z.x1 && i <= z.x2 && j >= z.y1 && j <= z.y2);
-                    if (zone) {
-                        if (zone.aliases.includes('회의실')) zoneAlias = 'meeting';
-                        else if (zone.aliases.includes('휴게실')) zoneAlias = 'break';
-                    }
-                }
-                
-                let tileKey = 'floor_work';
-                if (zoneAlias === 'meeting') tileKey = 'floor_meeting';
-                if (zoneAlias === 'break') tileKey = 'floor_break';
-                
-                const tile = this.add.image(i * this.gridSize, j * this.gridSize, tileKey)
-                    .setOrigin(0, 0)
-                    .setDisplaySize(this.gridSize, this.gridSize);
-                this.mapContainer.add(tile);
-            }
-        }
+  private updatePreview(p: Phaser.Input.Pointer) {
+    const { buildMode, selectedTool } = useGameStore.getState();
+    if (!this.mapContainer || !buildMode) return;
 
-        // Draw Obstacles (Furniture)
-        if (data.obstacles && data.obstacles.length > 0) {
-            data.obstacles.forEach((obs: any) => {
-                // Support both old [x, y] and new {x, y} formats just in case
-                const i = typeof obs.x === 'number' ? obs.x : obs[0];
-                const j = typeof obs.y === 'number' ? obs.y : obs[1];
-                let obsKey = obs.type || 'obstacle_desk';
-                
-                if (typeof i !== 'number' || typeof j !== 'number') return;
+    const cart = this.worldToCart(p.worldX, p.worldY);
+    const iso = this.cartToIso(cart.x, cart.y);
 
-                // Handle Wall separately as a geometric shape
-                if (obsKey === 'obstacle_wall') {
-                    const wall = this.add.rectangle(i * this.gridSize, j * this.gridSize, this.gridSize, this.gridSize, 0x475569)
-                        .setOrigin(0, 0);
-                    // Add a simple top border to give it depth
-                    const top = this.add.rectangle(i * this.gridSize, j * this.gridSize, this.gridSize, 4, 0x1e293b).setOrigin(0,0);
-                    this.mapContainer.add(wall);
-                    this.mapContainer.add(top);
-                    return;
-                }
+    if (buildMode && selectedTool.startsWith('obstacle_')) {
+      this.previewContainer.setVisible(true).setPosition(iso.x, iso.y + this.tileHeight / 2);
+      this.previewRect.clear().lineStyle(2, 0x00f2ff, 0.8);
+      this.previewRect.strokePoints([{ x: 0, y: -this.tileHeight / 2 }, { x: this.tileWidth / 2, y: 0 }, { x: 0, y: this.tileHeight / 2 }, { x: -this.tileWidth / 2, y: 0 }], true);
 
-                // Use manual rotation and flip_x from obstacle data
-                const tint = 0xffffff;
-                const angle = obs.rotation || 0;
-                const flipX = obs.flip_x || false;
-                
-                // Map variation IDs back to base texture keys
-                let baseKey = obs.type || 'obstacle_desk';
-                if (baseKey.includes('_2')) baseKey = baseKey.replace('_2', '');
-                if (baseKey.includes('_3')) baseKey = baseKey.replace('_3', '');
-
-                const tile = this.add.image(i * this.gridSize + this.gridSize/2, j * this.gridSize + this.gridSize/2, baseKey)
-                    .setOrigin(0.5, 0.5)
-                    .setDisplaySize(this.gridSize * 1.8, this.gridSize * 1.8)
-                    .setTint(tint)
-                    .setAngle(angle)
-                    .setFlipX(flipX);
-                this.mapContainer.add(tile);
-            });
-        }
-        
-        // Draw Zone Labels
-        data.zones.forEach((zone: any) => {
-            const x = zone.x1 * this.gridSize;
-            const y = zone.y1 * this.gridSize;
-            
-            // Restored Label with Pixel Font
-            const text = this.add.text(x + 8, y + 8, zone.name, { 
-                fontFamily: 'NeoDunggeunmo',
-                fontSize: '18px', 
-                color: '#ffffff', 
-                backgroundColor: 'rgba(0,0,0,0.5)',
-                padding: { x: 4, y: 2 }
-            });
-            text.setStroke('#000000', 2);
-            this.mapContainer.add(text);
-        });
-
-        // Grid lines at the end
-        const graphics = this.add.graphics();
-        graphics.lineStyle(2, 0x000000, 0.1); // Thicker grid lines
-        for (let i = 0; i <= data.width; i++) {
-            graphics.moveTo(i * this.gridSize, 0);
-            graphics.lineTo(i * this.gridSize, data.height * this.gridSize);
-        }
-        for (let j = 0; j <= data.height; j++) {
-            graphics.moveTo(0, j * this.gridSize);
-            graphics.lineTo(data.width * this.gridSize, j * this.gridSize);
-        }
-        this.mapContainer.add(graphics);
-        
-        // Handle window resize dynamically
-        this.scale.on('resize', () => {
-            if (useGameStore.getState().currentMap) {
-                this.syncMap(useGameStore.getState().currentMap);
-                this.syncAgents(useGameStore.getState().agents);
-            }
-        });
+      if (selectedTool === 'obstacle_wall') {
+        const frame = (cart.x === 0 || cart.y === 0) ? 0 : 1;
+        this.previewSprite.setTexture('walls_sheet').setFrame(frame).setOrigin(0.5, 0.86).setDisplaySize(this.tileWidth * 1.02, this.tileWidth * 1.45);
+      } else {
+        let frame = 0;
+        if (selectedTool.includes('chair')) frame = 5;
+        else if (selectedTool.includes('plant')) frame = 10;
+        else if (selectedTool.includes('table')) frame = 8;
+        else if (selectedTool.includes('server')) frame = 12;
+        this.previewSprite.setTexture('furniture_sheet').setFrame(frame).setOrigin(0.5, 0.78).setDisplaySize(this.tileWidth * 1.3, this.tileWidth * 1.3);
+      }
+    } else if (buildMode && selectedTool.startsWith('zone_') && this.dragStart) {
+      this.previewContainer.setVisible(false);
+      this.drawSelection(this.dragStart, cart);
+    } else {
+      this.previewContainer.setVisible(false);
+      this.selectionRect.clear();
     }
+  }
+
+  private cartToIso(x: number, y: number) {
+    return { x: (x - y) * (this.tileWidth / 2), y: (x + y) * (this.tileHeight / 2) };
+  }
+
+  private worldToCart(worldX: number, worldY: number) {
+    const relX = worldX - this.mapContainer.x;
+    const relY = worldY - this.mapContainer.y;
+    const cx = Math.floor((relX / (this.tileWidth / 2) + (relY - this.tileHeight / 2) / (this.tileHeight / 2)) / 2);
+    const cy = Math.floor(((relY - this.tileHeight / 2) / (this.tileHeight / 2) - relX / (this.tileWidth / 2)) / 2);
+    return { x: cx, y: cy };
+  }
+
+  private syncMap(data: any) {
+    if (!this.sys.game.canvas) return;
+    this.mapLayer.removeAll(true);
+    const canvasW = this.sys.game.canvas.width, canvasH = this.sys.game.canvas.height;
+    this.tileWidth = 160; this.tileHeight = 80;
+    const mapCenter = this.cartToIso(data.width / 2, data.height / 2);
+    this.mapContainer.setPosition(canvasW / 2 - mapCenter.x, canvasH / 2 - mapCenter.y);
+
+    const foundation = this.add.graphics();
+    foundation.fillStyle(0x05080f, 1);
+    const pLeft = this.cartToIso(0, data.height), pBottom = this.cartToIso(data.width, data.height), pRight = this.cartToIso(data.width, 0);
+    foundation.fillPoints([pLeft, pBottom, { x: pBottom.x, y: pBottom.y + 40 }, { x: pLeft.x, y: pLeft.y + 40 }], true);
+    foundation.fillStyle(0x03050a, 1);
+    foundation.fillPoints([pBottom, pRight, { x: pRight.x, y: pRight.y + 40 }, { x: pBottom.x, y: pBottom.y + 40 }], true);
+    this.mapLayer.add(foundation);
+
+    for (let j = 0; j < data.height; j++) {
+      for (let i = 0; i < data.width; i++) {
+        const iso = this.cartToIso(i, j);
+        const z = data.zone_data?.[j]?.[i];
+        const cx = iso.x, cy = iso.y + this.tileHeight / 2;
+        const tw = this.tileWidth, th = this.tileHeight;
+
+        // Base spaceship panel tile
+        const tile = this.add.graphics().setDepth(iso.y);
+        tile.fillStyle(0x3a3d45, 1);
+        tile.fillPoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
+        tile.lineStyle(1, 0x4a4d55, 0.3);
+        tile.strokePoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
+        tile.lineStyle(1, 0x4a4d55, 0.12);
+        tile.lineBetween(cx - tw/4, cy - th/4, cx + tw/4, cy - th/4);
+        tile.lineBetween(cx - tw/4, cy + th/4, cx + tw/4, cy + th/4);
+        this.mapLayer.add(tile);
+
+        // Zone overlay (editor only)
+        if (z && useGameStore.getState().buildMode) {
+          const zoneColors: Record<string, number> = {
+            work: 0x4488ff, meeting: 0x44ff88, break: 0xffcc44, lab: 0xaa44ff, ceo: 0xff4444
+          };
+          const zc = zoneColors[z] || 0x4488ff;
+          const ov = this.add.graphics().setDepth(iso.y + 0.5);
+          ov.fillStyle(zc, 0.2);
+          ov.fillPoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
+          ov.lineStyle(1, zc, 0.5);
+          ov.strokePoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
+          this.mapLayer.add(ov);
+        }
+      }
+    }
+
+    if (data.obstacles) {
+      data.obstacles.forEach((obs: any, idx: number) => {
+        const iso = this.cartToIso(obs.x, obs.y);
+        if (obs.type === 'obstacle_wall') {
+          const frame = (obs.x === 0 || obs.y === 0) ? 0 : 1;
+          const wall = this.add.sprite(iso.x, iso.y + this.tileHeight / 2, 'walls_sheet', frame).setOrigin(0.5, 0.86).setDisplaySize(this.tileWidth * 1.02, this.tileWidth * 1.45).setDepth(iso.y + 200);
+          this.mapLayer.add(wall);
+        } else {
+          let f = (idx % 12);
+          if (obs.type.includes('chair')) f = 5; else if (obs.type.includes('plant')) f = 10; else if (obs.type.includes('table')) f = 8; else if (obs.type.includes('server')) f = 12;
+          this.mapLayer.add(this.add.circle(iso.x, iso.y + this.tileHeight / 2, this.tileWidth / 4, 0x00f2ff, 0.1).setDepth(iso.y + 0.2));
+          this.mapLayer.add(this.add.ellipse(iso.x, iso.y + this.tileHeight / 2 + 5, this.tileWidth * 0.4, this.tileHeight * 0.4, 0x000000, 0.3).setDepth(iso.y + 0.1));
+          this.mapLayer.add(this.add.sprite(iso.x, iso.y + this.tileHeight / 2, 'furniture_sheet', f).setOrigin(0.5, 0.78).setDisplaySize(this.tileWidth * 1.3, this.tileWidth * 1.3).setFlipX(obs.flip_x || false).setDepth(iso.y + 60));
+        }
+      });
+    }
+    this.syncAgents(useGameStore.getState().agents);
+  }
+
+  private hasObstacleAt(d: any, x: number, y: number) { return d.obstacles?.some((o: any) => o.x === x && o.y === y); }
 
   private syncAgents(agents: Record<string, any>) {
-    // Keep agent grid size consistent with map
-    const gridSize = this.gridSize;
-
-    // Remove agents that are no longer in the store
-    for (const [id, spriteData] of this.agentSprites.entries()) {
-      if (!agents[id]) {
-        spriteData.container.destroy();
-        this.agentSprites.delete(id);
-      }
-    }
-
-    // Add or update agents
     for (const id in agents) {
-      const data = agents[id];
-      const targetX = data.x * gridSize + gridSize / 2;
-      const targetY = data.y * gridSize + gridSize / 2;
-
+      const d = agents[id], iso = this.cartToIso(d.x, d.y);
       if (!this.agentSprites.has(id)) {
-        // Create new agent container
-        const container = this.add.container(targetX, targetY);
-        
-        // Layered Appearance
-        const app = data.appearance || {};
-        const skinType = app.body || 'body_light';
-        const hairType = app.hair_style || 'hair_short';
-        const hairColor = app.hair_color || '#4B2C20';
-        const outfitType = app.outfit || 'agent_dev';
-
-        const spriteSize = Math.floor(gridSize * 2.5);
-        
-        // Skin Tones
-        let skinTint = 0xffe0bd;
-        if (skinType === 'body_tan') skinTint = 0xe0ac69;
-        if (skinType === 'body_dark') skinTint = 0x8d5524;
-
-        const bodySprite = this.add.sprite(0, 0, 'char_base').setDisplaySize(spriteSize, spriteSize).setTint(skinTint);
-        const outfitSprite = this.add.sprite(0, 0, outfitType).setDisplaySize(spriteSize, spriteSize);
-        
-        let hairSprite = null;
-        if (hairType !== 'none' && this.textures.exists(hairType)) {
-            const hColor = parseInt(hairColor.replace('#', '0x'));
-            hairSprite = this.add.sprite(0, -5, hairType).setDisplaySize(spriteSize, spriteSize).setTint(hColor);
-        }
-        
-        // Add all to container
-        const spriteLayers: Phaser.GameObjects.GameObject[] = [bodySprite, outfitSprite];
-        if (hairSprite) spriteLayers.push(hairSprite);
-
-        
-        // Name Label
-        const label = this.add.text(0, 35, data.name, { 
-          fontFamily: 'NeoDunggeunmo',
-          fontSize: '12px', 
-          color: '#ffffff',
-          backgroundColor: '#000000',
-          padding: { x: 4, y: 2 }
-        }).setOrigin(0.5);
-
-        // Speech Bubble
-        const bubble = this.add.text(0, -35, "", {
-          fontFamily: 'NeoDunggeunmo',
-          fontSize: '14px',
-          color: '#000000',
-          backgroundColor: '#ffffff',
-          padding: { x: 8, y: 6 },
-          wordWrap: { width: 150 },
-          align: 'center',
-        }).setOrigin(0.5, 1).setVisible(false);
-        
-        // Status Line (Floating above name)
-        const status = this.add.text(0, 20, "대기 중...", {
-            fontFamily: 'NeoDunggeunmo',
-            fontSize: '10px',
-            color: '#ffff00',
-            backgroundColor: 'rgba(0,0,0,0.7)',
-            padding: { x: 2, y: 1 }
-        }).setOrigin(0.5).setVisible(false);
-
-        container.add([...spriteLayers, label, bubble, status]);
-        this.agentSprites.set(id, { container, body: bodySprite, label, bubble, status } as any);
+        const c = this.add.container(iso.x, iso.y + this.tileHeight / 2);
+        const b = this.add.sprite(0, 0, 'agent_sheet', 0).setDisplaySize(this.tileWidth * 1.8, this.tileWidth * 1.8).setOrigin(0.5, 0.85);
+        const l = this.add.text(0, 25, d.name, { fontFamily: 'NeoDunggeunmo', fontSize: '14px', color: '#00f2ff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 0);
+        c.add([b, l]); c.setDepth(iso.y + 100);
+        this.agentSprites.set(id, { container: c, body: b, label: l } as any);
       } else {
-        // Update existing agent
-        const spriteData = this.agentSprites.get(id)!;
-        
-        // Smooth movement
-        this.tweens.add({
-          targets: spriteData.container,
-          x: targetX,
-          y: targetY,
-          duration: 400, // Faster, snappier movement for retro feel
-          ease: 'Linear'
-        });
-
-        // Update speech bubble
-        if (data.current_speech && data.current_speech.trim() !== "") {
-          spriteData.bubble.setText(data.current_speech);
-          spriteData.bubble.setVisible(true);
-        } else {
-          spriteData.bubble.setVisible(false);
-        }
-
-        // Update status text
-        if (data.current_action && data.current_action.trim() !== "") {
-          spriteData.status.setText(data.current_action);
-          spriteData.status.setVisible(true);
-        } else {
-          spriteData.status.setVisible(false);
-        }
+        const s = this.agentSprites.get(id)!;
+        this.tweens.add({ targets: s.container, x: iso.x, y: iso.y + this.tileHeight / 2, duration: 600, ease: 'Power2', onUpdate: () => s.container.setDepth(s.container.y + 100) });
       }
     }
   }
 
-    // Remove old renderMap to avoid confusion. syncMap is the true path.
+  private drawSelection(start: { x: number, y: number }, end: { x: number, y: number }) {
+    this.selectionRect.clear().lineStyle(2, 0x00f2ff, 1).fillStyle(0x00f2ff, 0.2);
+    const x1 = Math.min(start.x, end.x), y1 = Math.min(start.y, end.y), x2 = Math.max(start.x, end.x), y2 = Math.max(start.y, end.y);
+    const p1 = this.cartToIso(x1, y1), p2 = this.cartToIso(x2 + 1, y1), p3 = this.cartToIso(x2 + 1, y2 + 1), p4 = this.cartToIso(x1, y2 + 1);
+    const poly = [{ x: p1.x, y: p1.y }, { x: p2.x, y: p2.y }, { x: p3.x, y: p3.y }, { x: p4.x, y: p4.y }];
+    this.selectionRect.fillPoints(poly, true).strokePoints(poly, true);
+  }
+
+  private async handleMapAction(s: { x: number, y: number }, e: { x: number, y: number }) {
+    const { selectedTool } = useGameStore.getState();
+    const x1 = Math.min(s.x, e.x), y1 = Math.min(s.y, e.y), x2 = Math.max(s.x, e.x), y2 = Math.max(s.y, e.y);
+    try {
+      if (selectedTool === 'eraser') await removeObstacle(e.x, e.y);
+      else if (selectedTool.startsWith('zone_')) {
+        for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) await setZoneTile(i, j, selectedTool.replace('zone_', ''));
+      } else if (selectedTool.startsWith('obstacle_')) {
+        const { selectedRotation, selectedFlipX } = useGameStore.getState();
+        await placeObstacle(e.x, e.y, selectedTool, selectedRotation, selectedFlipX);
+      }
+      
+      // 즉시 맵 갱신 (실시간 피드백)
+      const updatedMap = await getMapCurrent();
+      useGameStore.getState().setMap(updatedMap);
+    } catch (err) {
+      console.error('Map action failed:', err);
+    }
+  }
 
   update() {
-    const { buildMode, selectedTool, currentMap } = useGameStore.getState();
-    const pointer = this.input.activePointer;
-
-    // Use a simpler check for pointer presence
-    const isPointerOver = pointer.x > 0 && pointer.y > 0 && pointer.x < this.sys.game.canvas.width && pointer.y < this.sys.game.canvas.height;
-
-    if (buildMode && currentMap && isPointerOver) {
-        this.previewContainer.setVisible(true);
-        
-        // Calculate grid position
-        const mapX = pointer.x - this.mapContainer.x;
-        const mapY = pointer.y - this.mapContainer.y;
-        const x = Math.floor(mapX / this.gridSize);
-        const y = Math.floor(mapY / this.gridSize);
-
-        // Snap to grid center for furniture, origin for tiles
-        const snapX = x * this.gridSize + this.gridSize / 2;
-        const snapY = y * this.gridSize + this.gridSize / 2;
-        this.previewContainer.setPosition(this.mapContainer.x + snapX, this.mapContainer.y + snapY);
-
-        // Check if current position is within map bounds
-        const isOutOfBounds = x < 0 || x >= currentMap.width || y < 0 || y >= currentMap.height;
-        const ghostAlpha = isOutOfBounds ? 0.3 : 0.6;
-        const ghostTint = isOutOfBounds ? 0xff0000 : 0xffffff;
-
-        this.previewContainer.setAlpha(ghostAlpha);
-
-        // Update preview appearance based on tool
-        if (selectedTool === 'eraser') {
-            this.previewSprite.setVisible(false);
-            this.previewRect.setVisible(true).setFillStyle(0xff0000, 0.4).setSize(this.gridSize, this.gridSize);
-        } else if (selectedTool.startsWith('zone_')) {
-            this.previewSprite.setVisible(false);
-            this.previewRect.setVisible(true).setSize(this.gridSize, this.gridSize);
-            const tint = isOutOfBounds ? 0xff0000 : (selectedTool === 'zone_meeting' ? 0xbbdefb : (selectedTool === 'zone_break' ? 0xc8e6c9 : 0xf5f5f5));
-            this.previewRect.setFillStyle(tint, 0.6);
-        } else if (selectedTool.startsWith('obstacle_')) {
-            if (selectedTool === 'obstacle_wall') {
-                this.previewSprite.setVisible(false);
-                this.previewRect.setVisible(true).setFillStyle(isOutOfBounds ? 0xff0000 : 0x475569, 0.7).setSize(this.gridSize, this.gridSize);
-            } else {
-                this.previewRect.setVisible(false);
-                this.previewSprite.setVisible(true);
-                
-                const { selectedRotation, selectedFlipX } = useGameStore.getState();
-                
-                // Map variation IDs back to base texture keys
-                let baseKey = selectedTool;
-                if (baseKey.includes('_2')) baseKey = baseKey.replace('_2', '');
-                if (baseKey.includes('_3')) baseKey = baseKey.replace('_3', '');
-                
-                if (this.textures.exists(baseKey)) {
-                    this.previewSprite.setTexture(baseKey)
-                        .setDisplaySize(this.gridSize * 1.8, this.gridSize * 1.8)
-                        .setTint(ghostTint)
-                        .setAngle(selectedRotation)
-                        .setFlipX(selectedFlipX);
-                }
-            }
-        }
-    } else {
-        this.previewContainer.setVisible(false);
-    }
+    const p = this.input.activePointer;
+    const { buildMode } = useGameStore.getState();
+    if (buildMode) this.updatePreview(p); else this.previewContainer.setVisible(false);
   }
 }

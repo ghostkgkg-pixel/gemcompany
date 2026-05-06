@@ -7,27 +7,26 @@ export const GameCanvas = () => {
   const gameRef = useRef<Phaser.Game | null>(null);
 
   useEffect(() => {
-    // Small delay to ensure DOM is fully ready and painted
     const timer = setTimeout(() => {
       if (!containerRef.current || gameRef.current) return;
 
-      console.log("Initializing Phaser Game...");
       const config: Phaser.Types.Core.GameConfig = {
-        type: Phaser.CANVAS, // Force CANVAS to avoid WebGL context issues in some environments
+        type: Phaser.CANVAS,
+        pixelArt: true,
+        antialias: false,
+        roundPixels: true,
         scale: {
           mode: Phaser.Scale.RESIZE,
           parent: containerRef.current,
           width: '100%',
-          height: '100%'
+          height: '100%',
+          autoCenter: Phaser.Scale.CENTER_BOTH
         },
-        backgroundColor: '#ffffff',
+        backgroundColor: '#05080f',
         scene: [MainScene],
         physics: {
           default: 'arcade',
-          arcade: {
-            gravity: { x: 0, y: 0 },
-            debug: false,
-          },
+          arcade: { gravity: { x: 0, y: 0 }, debug: false }
         },
       };
 
@@ -41,7 +40,6 @@ export const GameCanvas = () => {
     return () => {
       clearTimeout(timer);
       if (gameRef.current) {
-        console.log("Destroying Phaser Game...");
         gameRef.current.destroy(true);
         gameRef.current = null;
       }
@@ -49,11 +47,11 @@ export const GameCanvas = () => {
   }, []);
 
   return (
-    <div className="w-full h-full">
-      <div 
-        ref={containerRef} 
+    <div className="w-full h-full overflow-hidden">
+      <div
+        ref={containerRef}
         id="phaser-game-container"
-        className="w-full h-full bg-white" 
+        className="w-full h-full bg-[#05080f]"
       />
     </div>
   );

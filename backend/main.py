@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,6 +58,19 @@ class MapObstacle(BaseModel):
     flip_x: bool = False
 
 
+class ZoneCreateRequest(BaseModel):
+    name: str
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+    color: str = "#3b82f6"
+
+
+class ZoneRemoveRequest(BaseModel):
+    name: str
+
+
 class MapTemplate(BaseModel):
     id: str
     name: str
@@ -90,15 +104,25 @@ class Agent(BaseModel):
 MAP_TEMPLATES = {
     "standard_office": MapTemplate(
         id="standard_office",
-        name="Standard Office",
-        width=27,
-        height=11,
+        name="Gem Company Headquarters",
+        width=40,
+        height=20,
         zones=[
-            MapZone(name="Meeting Room", aliases=["회의실", "미팅룸", "meeting"], x1=0, y1=0, x2=6, y2=4, color="#e3f2fd", icon="groups"),
-            MapZone(name="Work Zone", aliases=["업무 구역", "사무실", "work"], x1=7, y1=0, x2=26, y2=10, color="#f5f5f5", icon="desktop_windows"),
-            MapZone(name="Break Area", aliases=["휴게실", "카페", "break"], x1=0, y1=5, x2=6, y2=10, color="#e8f5e9", icon="coffee"),
+            MapZone(name="Meeting Room", aliases=["회의실", "미팅룸", "meeting"], x1=0, y1=0, x2=10, y2=8, color="#e3f2fd", icon="groups"),
+            MapZone(name="Work Zone A", aliases=["업무 A구역", "사무실1", "work1"], x1=12, y1=0, x2=25, y2=12, color="#f5f5f5", icon="desktop_windows"),
+            MapZone(name="Work Zone B", aliases=["업무 B구역", "사무실2", "work2"], x1=27, y1=0, x2=39, y2=12, color="#f5f5f5", icon="desktop_windows"),
+            MapZone(name="Break Area", aliases=["휴게실", "카페", "break"], x1=0, y1=10, x2=10, y2=19, color="#e8f5e9", icon="coffee"),
+            MapZone(name="Research Lab", aliases=["연구실", "실험실", "lab"], x1=12, y1=14, x2=25, y2=19, color="#fff3e0", icon="science"),
+            MapZone(name="CEO Office", aliases=["대표실", "사장실", "ceo"], x1=27, y1=14, x2=39, y2=19, color="#f3e5f5", icon="stars"),
         ],
-        obstacles=[MapObstacle(x=6, y=5, type="obstacle_plant")],
+        obstacles=[
+            # Divider Walls (Vertical)
+            *[MapObstacle(x=11, y=i, type="obstacle_plant") for i in range(20)],
+            *[MapObstacle(x=26, y=i, type="obstacle_plant") for i in range(20)],
+            # Horizontal Dividers
+            *[MapObstacle(x=i, y=9, type="obstacle_plant") for i in range(11)],
+            *[MapObstacle(x=i, y=13, type="obstacle_plant") for i in range(12, 40)],
+        ],
     )
 }
 
@@ -123,9 +147,24 @@ work_memory = WorkMemoryManager(WORK_MEMORY_FILE)
 graph_db_path = os.path.join(BASE_DIR, "knowledge_graph.db")
 graph_engine = KnowledgeGraphEngine(graph_db_path)
 
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global interactive_queue, background_queue
+    interactive_queue = asyncio.PriorityQueue()
+    background_queue = asyncio.PriorityQueue()
+    load_state()
+    sync_all_agents()
+    asyncio.create_task(world_tick_loop())
+    asyncio.create_task(autonomous_decision_loop())
+    asyncio.create_task(cli_worker("interactive", interactive_queue))
+    asyncio.create_task(cli_worker("background", background_queue))
+    asyncio.create_task(cli_worker("background", background_queue))
+    yield
+
+
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*", logger=False, engineio_logger=False)
 sio_app = socketio.ASGIApp(sio)
-app = FastAPI(title="AI Agent Office Engine")
+app = FastAPI(title="AI Agent Office Engine", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -218,9 +257,9 @@ def set_agent_action(agent: Agent, action: str) -> None:
 def save_state() -> None:
     sync_all_agents()
     state = {
-        "agents": [agent.model_dump() for agent in agents.values()],
-        "current_map": current_map.model_dump() if current_map else None,
-        "user_saved_maps": {k: v.model_dump() for k, v in USER_SAVED_MAPS.items()},
+        "agents": [agent.dict() for agent in agents.values()],
+        "current_map": current_map.dict() if current_map else None,
+        "user_saved_maps": {k: v.dict() for k, v in USER_SAVED_MAPS.items()},
     }
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
@@ -551,20 +590,6 @@ async def autonomous_decision_loop():
         save_state()
 
 
-@app.on_event("startup")
-async def startup_event():
-    global interactive_queue, background_queue
-    interactive_queue = asyncio.PriorityQueue()
-    background_queue = asyncio.PriorityQueue()
-    load_state()
-    sync_all_agents()
-    asyncio.create_task(world_tick_loop())
-    asyncio.create_task(autonomous_decision_loop())
-    asyncio.create_task(cli_worker("interactive", interactive_queue))
-    asyncio.create_task(cli_worker("background", background_queue))
-    asyncio.create_task(cli_worker("background", background_queue))
-
-
 @app.post("/agents/{agent_id}/chat")
 async def chat_with_agent(agent_id: str, message: str):
     if agent_id not in agents:
@@ -608,13 +633,59 @@ async def get_current_map():
 
 @app.get("/graph/data")
 async def get_graph_data():
-    return graph_engine.get_graph_data().model_dump()
+    return graph_engine.get_graph_data().dict()
 
 
 @app.get("/agents")
 async def list_agents():
     sync_all_agents()
-    return list(agents.values())
+    return [a.dict() for a in agents.values()]
+
+
+@app.delete("/agents/{agent_id}")
+async def fire_agent(agent_id: str):
+    try:
+        print(f"[DEBUG] Attempting to fire agent: {agent_id}")
+        
+        # Robust ID lookup
+        target_key = None
+        if agent_id in agents:
+            target_key = agent_id
+        else:
+            for k, v in agents.items():
+                if v.id == agent_id:
+                    target_key = k
+                    break
+                    
+        if not target_key:
+            print(f"[ERROR] Agent {agent_id} not found. Keys: {list(agents.keys())}")
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        
+        agent_obj = agents[target_key]
+        agent_name = agent_obj.name
+        
+        # Remove from runtime
+        del agents[target_key]
+        
+        # Update knowledge graph
+        try:
+            graph_engine.record_entity(agent_id, "agent", agent_name, {"status": "fired", "fired_at": time.time()})
+        except Exception as ge_err:
+            print(f"[WARNING] Graph recording failed: {ge_err}")
+        except Exception as ge_err:
+            print(f"[WARNING] Graph recording failed during fire: {ge_err}")
+        
+        save_state()
+        await broadcast_agents()
+        await sio.emit("agent_fired", {"agent_id": agent_id, "name": agent_name})
+        
+        print(f"[SUCCESS] Agent {agent_name} ({agent_id}) has been fired.")
+        return {"status": "success", "message": f"Agent {agent_name} has been fired."}
+    except Exception as e:
+        print(f"[CRITICAL ERROR] Fire agent failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/map/select/{map_id}")
@@ -699,6 +770,9 @@ async def remove_obstacle(x: int, y: int):
     return {"message": "Removed", "obstacles": m.obstacles}
 
 
+    raise HTTPException(status_code=400, detail="Out of bounds")
+
+
 @app.post("/map/zones/set")
 async def set_zone_tile(x: int, y: int, zone_type: str):
     global current_map
@@ -710,8 +784,40 @@ async def set_zone_tile(x: int, y: int, zone_type: str):
         current_map = m
         await broadcast_map(m.model_dump())
         save_state()
-        return {"message": "Zone updated"}
+        return {"message": "Zone tile updated"}
     raise HTTPException(status_code=400, detail="Out of bounds")
+
+
+@app.post("/map/zones/add")
+async def add_zone(req: ZoneCreateRequest):
+    global current_map
+    m = current_map or MAP_TEMPLATES["standard_office"]
+    new_zone = MapZone(
+        name=req.name, 
+        aliases=[req.name.lower()], 
+        x1=min(req.x1, req.x2), 
+        y1=min(req.y1, req.y2), 
+        x2=max(req.x1, req.x2), 
+        y2=max(req.y1, req.y2), 
+        color=req.color, 
+        icon="label"
+    )
+    m.zones.append(new_zone)
+    current_map = m
+    await broadcast_map(m.model_dump())
+    save_state()
+    return {"message": "Zone added", "zones": m.zones}
+
+
+@app.post("/map/zones/remove")
+async def remove_zone(req: ZoneRemoveRequest):
+    global current_map
+    m = current_map or MAP_TEMPLATES["standard_office"]
+    m.zones = [z for z in m.zones if z.name != req.name]
+    current_map = m
+    await broadcast_map(m.model_dump())
+    save_state()
+    return {"message": "Zone removed", "zones": m.zones}
 
 
 @app.post("/map/save")
@@ -723,6 +829,15 @@ async def save_map(name: str):
         save_state()
         return {"message": f"Map '{name}' saved successfully"}
     raise HTTPException(status_code=400, detail="No map to save")
+
+
+@app.post("/map/delete/{name}")
+async def delete_map(name: str):
+    if name in USER_SAVED_MAPS:
+        del USER_SAVED_MAPS[name]
+        save_state()
+        return {"message": f"Map '{name}' deleted"}
+    raise HTTPException(status_code=404, detail="Map not found")
 
 
 @app.get("/map/templates")

@@ -29,8 +29,13 @@ export const moveAgent = async (agentId: string, x: number, y: number) => {
 };
 
 export const chatWithAgent = async (agentId: string, message: string) => {
-  const response = await axios.post(`${API_BASE}/agents/${agentId}/chat?message=${encodeURIComponent(message)}`);
-  return response.data;
+  const res = await axios.post(`${API_BASE}/agents/${agentId}/chat`, null, { params: { message } });
+  return res.data;
+};
+
+export const fireAgent = async (agentId: string) => {
+  const res = await axios.delete(`${API_BASE}/agents/${agentId}`);
+  return res.data;
 };
 
 export const placeObstacle = async (x: number, y: number, type: string, rotation: number = 0, flipX: boolean = false) => {
@@ -50,5 +55,20 @@ export const setZoneTile = async (x: number, y: number, zoneType: string) => {
 
 export const saveMap = async (name: string) => {
   const response = await axios.post(`${API_BASE}/map/save?name=${encodeURIComponent(name)}`);
+  return response.data;
+};
+
+export const deleteMap = async (name: string) => {
+  const response = await axios.post(`${API_BASE}/map/delete/${encodeURIComponent(name)}`);
+  return response.data;
+};
+
+export const addZone = async (name: string, x1: number, y1: number, x2: number, y2: number, color: string) => {
+  const response = await axios.post(`${API_BASE}/map/zones/add?name=${encodeURIComponent(name)}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&color=${encodeURIComponent(color)}`);
+  return response.data;
+};
+
+export const removeZone = async (name: string) => {
+  const response = await axios.post(`${API_BASE}/map/zones/remove?name=${encodeURIComponent(name)}`);
   return response.data;
 };

@@ -1,19 +1,17 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { GameCanvas } from './GameCanvas';
 import { useGameStore } from '../store/useGameStore';
-import { getMapCurrent, moveAgent, chatWithAgent } from '../services/api';
+import { getMapCurrent, moveAgent, chatWithAgent, fireAgent } from '../services/api';
 import { initSocket } from '../services/socket';
-import { Users, Map as MapIcon, Navigation, MessageCircle, Share2 } from 'lucide-react';
+import { Users, Navigation, MessageCircle, Share2, LogOut, X } from 'lucide-react';
 import { KnowledgeGraph } from './GraphView/KnowledgeGraph';
-import { LogOut } from 'lucide-react';
+import { CharacterPreview } from './CharacterPreview';
 
 interface SimulationPageProps {
   onGoBack: () => void;
 }
 
 export function SimulationPage({ onGoBack }: SimulationPageProps) {
-  console.log("SimulationPage Rendering...");
-  
   const setMap = useGameStore((state: any) => state.setMap);
   const agentsObj = useGameStore((state: any) => state.agents);
   const currentMap = useGameStore((state: any) => state.currentMap);
@@ -25,6 +23,9 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
   const [chatMessage, setChatMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showGraph, setShowGraph] = useState(false);
+  const [fireConfirmId, setFireConfirmId] = useState<string | null>(null);
+  const [expandLog, setExpandLog] = useState(false);
+  const [isChatFocused, setIsChatFocused] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -41,244 +42,263 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
     initSocket();
   }, [setMap]);
 
-  if (error) {
-    return (
-      <div className="w-full h-screen flex flex-col items-center justify-center gap-4 bg-red-100">
-        <div className="p-4 bg-red-200 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-red-800 font-bold">
-          {error}
-        </div>
-        <button onClick={() => window.location.reload()} className="px-4 py-2 bg-blue-400 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none hover:bg-blue-500 font-bold text-white">다시 연결</button>
-      </div>
-    );
-  }
-
-  // Templates loading check removed since it's handled in setup
-
-
-
-  const handleMove = async (id: string) => {
-    // For testing, pick a random coordinate
-    const targetX = Math.floor(Math.random() * 10);
-    const targetY = Math.floor(Math.random() * 10);
-    try {
-      await moveAgent(id, targetX, targetY);
-    } catch (error) {
-      console.error("Failed to move agent:", error);
-    }
-  };
-
-
-
-  const handleChat = async () => {
+  const handleSendMessage = async () => {
     if (!selectedAgentId || !chatMessage.trim()) return;
+    
     setIsSending(true);
     try {
       await chatWithAgent(selectedAgentId, chatMessage);
       setChatMessage('');
-    } catch (error) {
-      console.error("Chat failed:", error);
+    } catch (err) {
+      console.error("Chat failed:", err);
     } finally {
       setIsSending(false);
     }
   };
 
-  const logEndRef = useRef<HTMLDivElement>(null);
+  const handleFireAgent = async (agentId: string) => {
+    try {
+      await fireAgent(agentId);
+      setSelectedAgentId(null);
+      setFireConfirmId(null);
+    } catch (err: any) {
+      console.error("Fire failed:", err);
+      const detail = err.response?.data?.detail || "알 수 없는 에러가 발생했습니다.";
+      alert(`해고 처리에 실패했습니다: ${detail}`);
+    }
+  };
 
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [agents]);
+  if (error) {
+    return (
+      <div className="w-full h-screen flex flex-col items-center justify-center gap-4 bg-[#0a1120] text-red-500 font-['NeoDunggeunmo']">
+        <div className="p-6 bg-red-500/10 border-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)] font-black italic">
+          SYSTEM ERROR: {error}
+        </div>
+        <button onClick={() => window.location.reload()} className="px-6 py-2 bg-white text-[#0a1120] font-black italic hover:bg-red-500 hover:text-white transition-all">RECONNECT</button>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full h-screen flex overflow-hidden fixed inset-0 font-['NeoDunggeunmo'] text-black p-4 gap-4">
+    <div className="w-full h-screen bg-[#0a0f1e] text-[#00f2ff] font-['NeoDunggeunmo'] flex flex-col relative overflow-hidden scanline-effect">
       
-      {/* Sidebar */}
-      <aside className="w-80 h-full flex flex-col gap-4 flex-shrink-0 relative z-10">
-        
-        {/* Title Box */}
-        <div className="bg-white border-4 border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-2 relative">
-            <h1 className="text-xl font-bold text-black tracking-wider">직원 모니터링</h1>
-            <button 
-              onClick={onGoBack}
-              className="absolute right-[-10px] top-[-10px] bg-red-400 border-2 border-black p-1 hover:bg-red-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none text-white"
-              title="로비로 돌아가기 (퇴근)"
-            >
-              <LogOut size={16} />
-            </button>
+      {/* Background Ambience (Global Overlay for consistent CRT texture) */}
+      <div className="absolute inset-0 opacity-20 pointer-events-none z-[100]">
+        <div className="absolute inset-0 bg-[radial-gradient(#00f2ff_1px,transparent_1px)] [background-size:20px_20px]" />
+      </div>
+
+      {/* Side Decorative Lines */}
+      <div className="absolute top-0 left-12 w-px h-full bg-gradient-to-b from-transparent via-[#00f2ff]/20 to-transparent pointer-events-none z-[100]" />
+      <div className="absolute top-0 right-12 w-px h-full bg-gradient-to-b from-transparent via-[#00f2ff]/20 to-transparent pointer-events-none z-[100]" />
+
+      {/* Header HUD */}
+      <header className="h-16 cyber-panel-v2 panel-scanline border-x-0 px-6 flex items-center justify-between z-50 mx-4 mt-2">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+             <div className="w-8 h-8 bg-[#00f2ff]/10 border border-[#00f2ff]/30 rounded-lg flex items-center justify-center neon-text-intense animate-pulse">
+                <Navigation size={18} />
+             </div>
+             <div className="flex flex-col">
+               <span className="text-[10px] font-bold opacity-60 uppercase italic tracking-widest">작전 구역</span>
+               <span className="text-lg font-black text-white uppercase tracking-tighter italic leading-none neon-text-intense">{currentMap?.name || '초기화 중...'}</span>
+             </div>
+          </div>
+          
+          <div className="h-8 w-px bg-white/10 hidden md:block" />
+          
+          <div className="hidden md:flex gap-6">
+             <div className="flex flex-col">
+               <span className="text-[10px] font-bold opacity-60 uppercase italic tracking-widest">활성 유닛</span>
+               <span className="text-sm font-black text-[#00f2ff]">{agents.length} AGENTS</span>
+             </div>
+          </div>
         </div>
 
-        {/* Agent List */}
-        <section className="flex-1 bg-white p-4 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col overflow-hidden">
-          <div className="flex items-center gap-2 text-black mb-2 text-sm font-bold uppercase tracking-wider border-b-2 border-black pb-1">
-            <Users size={16} />
-            <span>현재 직원 목록 ({agents.length}명)</span>
+        <button 
+          onClick={onGoBack} 
+          className="group flex items-center gap-2 px-4 py-1.5 border border-red-500/50 hover:bg-red-500/20 text-red-500 transition-all italic text-sm font-bold"
+        >
+          <LogOut size={16} className="group-hover:-translate-x-1 transition-transform" /> 
+          퇴근하기
+        </button>
+      </header>
+
+      <div className="flex-1 flex overflow-hidden p-4 gap-4">
+        {/* Left Sidebar: Agent List */}
+        <aside className="w-72 cyber-panel-v2 panel-scanline flex flex-col z-40">
+          <div className="p-4 border-b border-white/5 bg-[#00f2ff]/5">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] italic flex items-center gap-2 text-white/80 neon-text-intense">
+               <Users size={14} className="text-[#00f2ff]" /> 인원 데이터베이스
+            </h3>
           </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-2 pr-2">
+          
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
             {agents.map((agent: any) => (
               <div 
-                key={agent?.id} 
-                onClick={() => setSelectedAgentId(agent?.id)}
-                className={`border-2 p-2 cursor-pointer transition-all ${selectedAgentId === agent?.id ? 'border-black bg-[#bfdbfe] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-1 -translate-x-1' : 'border-gray-300 hover:border-black bg-gray-50'}`}
+                key={agent.id}
+                onClick={() => setSelectedAgentId(agent.id)}
+                className={`p-3 cursor-pointer border transition-all duration-300 group ${
+                  selectedAgentId === agent.id 
+                  ? 'bg-[#00f2ff]/20 border-[#00f2ff] shadow-[0_0_10px_rgba(0,242,255,0.2)]' 
+                  : 'bg-white/5 border-white/10 hover:border-white/30'
+                }`}
               >
-                <div className="flex justify-between items-start mb-1">
-                  <div className="font-bold text-lg text-blue-700">{agent?.name}</div>
-                  <div className="text-[10px] bg-yellow-200 px-1 border border-black">{agent?.persona?.Role || '직원'}</div>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">
+                       <div className="w-6 h-6 rounded-full" style={{ backgroundColor: agent?.appearance?.hair_color || '#444' }} />
+                    </div>
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-black uppercase text-white truncate">{agent.name}</span>
+                    <span className="text-[9px] font-bold text-[#00f2ff]/60 uppercase truncate italic">
+                      {agent?.persona?.Job || 'AI UNIT'}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-xs text-gray-700 truncate mb-1">
-                  행동: {agent?.current_action}
-                </div>
-                {agent?.current_task?.status && (
-                  <div className="text-[10px] font-bold text-purple-600 mt-1">
-                    작업 상태: {agent.current_task.status}
-                  </div>
-                )}
-                {agent?.work_history && agent.work_history.length > 0 && (
-                  <div className="text-[9px] font-bold text-blue-500 mt-1 flex items-center gap-1">
-                    <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                    작업 중 ({agent.work_history.length})
-                  </div>
-                )}
-                {agent?.current_speech && (
-                  <div className="text-xs bg-white border border-gray-400 p-1 mt-2 italic text-gray-800 line-clamp-2">
-                    "{agent.current_speech}"
-                  </div>
-                )}
               </div>
             ))}
-            {agents.length === 0 && (
-              <div className="text-center text-gray-400 mt-10 text-sm">출근한 직원이 없습니다.</div>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 relative bg-transparent flex items-center justify-center group cyber-panel-v2 panel-scanline p-0 overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none border-[12px] border-[#151b2d]/50 z-10" />
+          <div className="w-full h-full relative">
+            <GameCanvas />
+            
+            {/* Overlay Graph Toggle */}
+            <button 
+              onClick={() => setShowGraph(!showGraph)}
+              className={`absolute top-4 right-4 z-30 p-3 border-2 transition-all shadow-[0_0_15px_rgba(0,0,0,0.5)] ${
+                showGraph ? 'bg-[#00f2ff] text-[#0a1120] border-white' : 'bg-black/80 text-[#00f2ff] border-[#00f2ff]/50 hover:bg-[#00f2ff]/10'
+              }`}
+            >
+              <Share2 size={24} />
+            </button>
+            
+            {/* Graph View Overlay */}
+            {showGraph && (
+              <div className="absolute inset-0 z-20 bg-[#0a1120]/95 backdrop-blur-md animate-in fade-in duration-300 p-8 flex flex-col">
+                <div className="flex justify-between items-center mb-8 border-b-2 border-[#00f2ff]/20 pb-4">
+                   <h2 className="text-3xl font-black italic uppercase tracking-tighter text-[#00f2ff] neon-text">Neural Network Graph</h2>
+                   <button onClick={() => setShowGraph(false)} className="text-[#00f2ff]/60 hover:text-white transition-colors">
+                      <X size={32} />
+                   </button>
+                </div>
+                <div className="flex-1 border border-white/5 bg-black/20 overflow-hidden relative">
+                   <KnowledgeGraph />
+                   <div className="absolute inset-0 pointer-events-none scanline-effect opacity-30" />
+                </div>
+              </div>
             )}
           </div>
-        </section>
 
-      </aside>
+          {/* Bottom Chat / Activity Area (Overlay Style) */}
+          <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-4xl z-30 transition-all duration-500 transform ${expandLog ? 'translate-y-0' : 'translate-y-[85%]'}`}>
+             <div className={`cyber-panel-v2 panel-scanline shadow-[0_10px_50px_rgba(0,0,0,0.8)] transition-all duration-500`}>
+                {/* Drag / Toggle Handle */}
+                <div 
+                  onClick={() => setExpandLog(!expandLog)}
+                  className="h-8 flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors group border-b border-white/5"
+                >
+                   <div className={`w-12 h-1 bg-[#00f2ff]/30 rounded-full group-hover:bg-[#00f2ff] transition-colors ${expandLog ? 'rotate-180' : ''}`} />
+                </div>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col gap-4 min-w-0">
-        
-        {/* Top Bar */}
-        <header className="bg-white border-4 border-black p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex justify-between items-center z-10 relative">
-          <div className="flex items-center gap-2 font-bold text-lg">
-            <MapIcon size={20} className="text-green-600" />
-            <span>오피스 맵</span>
-            <span className="text-sm font-normal text-gray-500 ml-2">({currentMap?.name || '로딩중'})</span>
+                <div className="p-6 h-[400px] flex gap-6 overflow-hidden">
+                   {/* Agent Detail Panel */}
+                   <div className="w-64 border-r border-white/10 pr-6 flex flex-col gap-4">
+                      {selectedAgentId ? (
+                        <>
+                          <div className="relative aspect-square bg-black/40 border border-[#00f2ff]/20 flex items-center justify-center p-4">
+                             <div className="w-20 h-20 bg-[#00f2ff]/10 rounded-full blur-xl absolute" />
+                             <CharacterPreview form={agentsObj[selectedAgentId]?.appearance} />
+                          </div>
+                          <div className="space-y-1">
+                             <div className="text-lg font-black text-white uppercase italic truncate">{agentsObj[selectedAgentId]?.name}</div>
+                             <div className="text-[10px] font-bold text-[#00f2ff] uppercase tracking-widest">{agentsObj[selectedAgentId]?.persona?.Job}</div>
+                             <p className="text-[9px] text-white/50 leading-relaxed mt-2 line-clamp-3 italic">
+                                "{agentsObj[selectedAgentId]?.persona?.Personality || 'Active and ready for work.'}"
+                             </p>
+                          </div>
+                          <button 
+                            onClick={() => setFireConfirmId(selectedAgentId)}
+                            className="mt-auto py-2 border border-red-500/30 text-red-500/50 hover:bg-red-500/10 hover:text-red-500 transition-all text-[10px] font-bold uppercase tracking-widest italic"
+                          >
+                            Terminate Contract
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-[#00f2ff]/20 italic text-[10px] text-center p-4 border-2 border-dashed border-white/5">
+                           SELECT AGENT TO MONITOR
+                        </div>
+                      )}
+                   </div>
+
+                   {/* Activity / Chat Log */}
+                   <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+                      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                        {selectedAgentId ? (
+                          <>
+                            <div className="text-[10px] font-black text-[#00f2ff]/40 uppercase tracking-widest mb-4 flex items-center gap-2">
+                               <MessageCircle size={12} /> Neural Feed / Communications
+                            </div>
+                            <div className="p-2 bg-white/5 border-l-2 border-[#00f2ff] text-[11px]">
+                               <span className="text-[#00f2ff] font-black mr-2">[SYSTEM]</span> Agent initialized and waiting for instructions.
+                            </div>
+                          </>
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-white/10 uppercase font-black text-2xl italic tracking-tighter">
+                             Standby for Data
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Chat Input */}
+                      <div className={`transition-all duration-300 ${selectedAgentId ? 'opacity-100 translate-y-0' : 'opacity-20 pointer-events-none translate-y-4'}`}>
+                        <div className={`relative border-2 transition-all ${isChatFocused ? 'border-[#00f2ff] shadow-[0_0_15px_rgba(0,242,255,0.2)]' : 'border-white/10'}`}>
+                          <input 
+                            type="text" 
+                            value={chatMessage}
+                            onChange={(e) => setChatMessage(e.target.value)}
+                            onFocus={() => setIsChatFocused(true)}
+                            onBlur={() => setIsChatFocused(false)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                            placeholder={`COMMAND ${agentsObj[selectedAgentId]?.name?.toUpperCase() || 'AGENT'}...`}
+                            className="w-full p-4 bg-transparent outline-none font-bold text-[#00f2ff] placeholder:text-white/10"
+                          />
+                          <button 
+                            onClick={handleSendMessage}
+                            disabled={isSending || !chatMessage.trim()}
+                            className="absolute right-2 top-2 bottom-2 px-6 cyber-button text-xs"
+                          >
+                             {isSending ? 'TX...' : 'TRANSMIT'}
+                          </button>
+                        </div>
+                      </div>
+                   </div>
+                </div>
+             </div>
           </div>
-          <button 
-            onClick={onGoBack}
-            className="px-4 py-1 bg-red-400 border-2 border-black hover:bg-red-500 text-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none"
-          >
-            퇴근하기 (로비)
-          </button>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setShowGraph(true)}
-              className="px-4 py-1 bg-blue-500 border-2 border-black hover:bg-blue-600 text-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none flex items-center gap-2"
-            >
-              <Share2 size={18} /> 지식 그래프
-            </button>
-            <button 
-              onClick={onGoBack}
-              className="px-4 py-1 bg-red-400 border-2 border-black hover:bg-red-500 text-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none"
-            >
-              퇴근하기 (로비)
-            </button>
-          </div>
-        </header>
+        </main>
+      </div>
 
-        {/* Game Canvas Container */}
-        <div className="flex-1 bg-[#86efac] border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden flex items-center justify-center p-2">
-           <div className="w-full h-full border-2 border-black bg-white overflow-hidden relative">
-             <GameCanvas />
+      {/* FIRE CONFIRM MODAL */}
+      {fireConfirmId && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[5000] p-4 backdrop-blur-xl">
+           <div className="bg-[#151b2d] border-4 border-red-500 p-8 max-w-md w-full shadow-[0_0_50px_rgba(239,68,68,0.3)] animate-pop-in">
+              <h2 className="text-3xl font-black text-red-500 italic uppercase tracking-tighter mb-4">TERMINATION PROTOCOL</h2>
+              <p className="text-white/80 mb-8 leading-relaxed">
+                 Are you sure you want to permanently terminate agent <span className="text-red-500 font-black">"{agentsObj[fireConfirmId]?.name}"</span>? 
+                 All neural data will be purged.
+              </p>
+              <div className="flex gap-4">
+                 <button onClick={() => setFireConfirmId(null)} className="flex-1 py-3 border-2 border-white/20 text-white font-bold hover:bg-white/5 transition-all">ABORT</button>
+                 <button onClick={() => handleFireAgent(fireConfirmId)} className="flex-1 py-3 bg-red-500 text-white font-black hover:bg-red-600 shadow-[0_0_20px_rgba(239,68,68,0.4)]">EXECUTE</button>
+              </div>
            </div>
         </div>
-
-        {/* Chat / Command Panel & Work Log */}
-        <div className="flex gap-4 h-48 z-10 relative">
-          <section className="flex-1 bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3 flex gap-3 overflow-hidden">
-            <div className="flex-1 flex flex-col">
-              <div className="text-sm font-bold text-black mb-1 flex items-center gap-1">
-                <MessageCircle size={14} /> 
-                {selectedAgentId ? `${(agents.find((a:any) => a.id === selectedAgentId) as any)?.name || ''}에게 말걸기` : '직원을 선택하세요'}
-              </div>
-              <textarea
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                disabled={!selectedAgentId}
-                placeholder={selectedAgentId ? "메시지를 입력하세요..." : "대화할 직원을 왼쪽에서 클릭하세요."}
-                className="flex-1 w-full bg-gray-50 border-2 border-black p-2 text-sm focus:outline-none resize-none disabled:bg-gray-200"
-              />
-            </div>
-            <div className="flex flex-col gap-2 justify-end w-32">
-               <button 
-                  onClick={handleChat}
-                  disabled={!selectedAgentId || !chatMessage.trim() || isSending}
-                  className="w-full bg-[#f87171] hover:bg-[#ef4444] disabled:opacity-50 py-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none font-bold text-white flex items-center justify-center gap-1"
-                >
-                  {isSending ? <span className="animate-pulse">전송중..</span> : <span>말하기</span>}
-                </button>
-                <button 
-                  onClick={() => selectedAgentId && handleMove(selectedAgentId)}
-                  disabled={!selectedAgentId}
-                  className="w-full bg-[#4ade80] hover:bg-[#22c55e] disabled:opacity-50 py-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none font-bold text-white flex items-center justify-center gap-1"
-                >
-                  <Navigation size={14} /> 랜덤이동
-                </button>
-            </div>
-          </section>
-
-          {/* Work Log Section */}
-          <section className="w-80 bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3 flex flex-col overflow-hidden">
-             <div className="text-sm font-bold text-blue-600 mb-1 border-b-2 border-black pb-1 uppercase tracking-tighter italic">
-               📋 작업 로그
-             </div>
-             <div className="flex-1 overflow-y-auto custom-scrollbar text-[10px] font-mono leading-tight space-y-2 mt-1">
-               {selectedAgentId ? (
-                 (agents.find((a:any) => a.id === selectedAgentId) as any)?.work_history?.length > 0 ? (
-                   (agents.find((a:any) => a.id === selectedAgentId) as any).work_history.map((work: string, i: number) => {
-                     const isFile = work.includes("] FILE:");
-                     let fileName = "";
-                     let displayText = work;
-                     
-                     if (isFile) {
-                       const parts = work.split("FILE:")[1].split("|");
-                       fileName = parts[0];
-                       displayText = work.split("] ")[0] + "] " + parts[1];
-                     }
-
-                     return (
-                       <div key={i} className="bg-blue-50 border-l-4 border-blue-400 p-2 shadow-sm animate-in slide-in-from-left-2">
-                         <div className="text-blue-800 font-bold mb-0.5">{displayText.split('] ')[0]}]</div>
-                         <div className="text-black mb-1">{displayText.split('] ')[1]}</div>
-                         {isFile && (
-                           <a 
-                             href={`http://localhost:8000/outputs/${fileName}`} 
-                             target="_blank" 
-                             rel="noopener noreferrer"
-                             className="inline-flex items-center gap-1 text-[8px] bg-white border border-blue-400 px-1 py-0.5 text-blue-600 hover:bg-blue-100 font-bold"
-                           >
-                             📂 {fileName} 열기
-                           </a>
-                         )}
-                       </div>
-                     );
-                   }).reverse()
-                 ) : (
-                   <div className="h-full flex items-center justify-center text-gray-400 italic">아직 기록된 작업이 없습니다.</div>
-                 )
-               ) : (
-                 <div className="h-full flex items-center justify-center text-gray-400 italic">직원을 선택하면 로그가 표시됩니다.</div>
-               )}
-               <div ref={logEndRef} />
-             </div>
-          </section>
-        </div>
-
-      </main>
-
-      {/* Knowledge Graph Overlay */}
-      {showGraph && (
-        <KnowledgeGraph onClose={() => setShowGraph(false)} />
       )}
     </div>
   );
 }
-
