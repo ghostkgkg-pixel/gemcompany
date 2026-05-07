@@ -298,47 +298,31 @@ export class MainScene extends Phaser.Scene {
 
         const cx = iso.x, cy = iso.y + this.tileHeight / 2;
         const tw = this.tileWidth, th = this.tileHeight;
-        const thickness = 12;
+        // Render Floor Sprite
+        let frame = -1;
+        if (z === 'neon_border') frame = 0;
+        else if (z === 'grid_dot') frame = 1;
+        else if (z === 'premium_carpet') frame = 2;
+        else if (z === 'wood') frame = 3;
+        else if (z === 'metal') frame = 4;
+        else if (z === 'glass') frame = 5;
+        else if (z === 'concrete') frame = 6;
+        else if (z && z !== 'none' && z !== 'void') frame = 7;
 
-        const tile = this.add.graphics().setDepth(iso.y);
-        let alpha = 1.0;
-        if (z === 'void' && isBuild) alpha = 0.1;
-        else if (z === 'none' && !hasObs && isBuild) alpha = 0.15;
-
-        // 1. Bottom Glow (Floating Effect)
-        if (alpha > 0.5) {
-          tile.lineStyle(4, 0x00f2ff, 0.2);
-          tile.strokePoints([{x: cx, y: cy + th/2 + thickness + 4}, {x: cx + tw/2, y: cy + thickness + 4}, {x: cx, y: cy - th/2 + thickness + 4}, {x: cx - tw/2, y: cy + thickness + 4}], true);
+        if (frame !== -1) {
+          const floorSprite = this.add.sprite(cx, cy, 'floor_sheet', frame)
+            .setDisplaySize(tw * 1.05, th * 2.2)
+            .setOrigin(0.5, 0.72)
+            .setDepth(iso.y - 100);
+          if (z === 'void' && isBuild) floorSprite.setAlpha(0.2);
+          else if (z === 'none' && !hasObs && isBuild) floorSprite.setAlpha(0.3);
+          this.mapLayer.add(floorSprite);
+        } else if (isBuild || z !== 'void') {
+           const tile = this.add.graphics().setDepth(iso.y - 101);
+           tile.lineStyle(1, 0x00f2ff, 0.1);
+           tile.strokePoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
+           this.mapLayer.add(tile);
         }
-
-        // 2. Side Faces (Thickness)
-        const sideColor = 0x1a1d25;
-        tile.fillStyle(sideColor, alpha);
-        // Front-Left Face
-        tile.fillPoints([{x: cx - tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx, y: cy + th/2 + thickness}, {x: cx - tw/2, y: cy + thickness}], true);
-        // Front-Right Face
-        tile.fillPoints([{x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx, y: cy + th/2 + thickness}, {x: cx + tw/2, y: cy + thickness}], true);
-
-        // 3. Top Face
-        let topColor = 0x2a2d35;
-        if (z === 'neon_border') topColor = 0x001f3f;
-        else if (z === 'grid_dot') topColor = 0x1a1a1a;
-        else if (z === 'premium_carpet') topColor = 0x2d1b4d;
-        else if (z && z !== 'none' && z !== 'void') topColor = 0x3a3d45;
-
-        tile.fillStyle(topColor, alpha);
-        tile.fillPoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
-
-        // Neon border highlight
-        if (z === 'neon_border' && alpha > 0.5) {
-          tile.lineStyle(2, 0x00f2ff, 0.5);
-          tile.strokePoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
-        }
-        
-        // 4. Panel details
-        tile.lineStyle(1, 0x4a4d55, 0.1 * alpha);
-        tile.strokePoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
-        this.mapLayer.add(tile);
 
         // Zone overlay (editor only or specific functional zones)
         if (z && z !== 'none' && z !== 'void' && !['neon_border', 'grid_dot', 'premium_carpet'].includes(z)) {
@@ -531,8 +515,9 @@ export class MainScene extends Phaser.Scene {
           await MapService.assignObstacle(e.x, e.y, nextOwner);
         }
       }
-      else if (selectedTool.startsWith('zone_')) {
-        for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) await MapService.setZoneTile(i, j, selectedTool.replace('zone_', ''));
+      else if (selectedTool.startsWith('zone_') || ['neon_border', 'grid_dot', 'premium_carpet', 'wood', 'metal', 'glass', 'concrete'].includes(selectedTool)) {
+        const tileType = selectedTool.startsWith('zone_') ? selectedTool.replace('zone_', '') : selectedTool;
+        for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) await MapService.setZoneTile(i, j, tileType);
         const updatedMap = await MapService.getCurrentMap();
         useGameStore.getState().setMap(updatedMap);
       } else if (selectedTool.startsWith('obstacle_')) {

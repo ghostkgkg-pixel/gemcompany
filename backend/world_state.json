@@ -2,52 +2,51 @@
   "subscription_plan": "enterprise",
   "agents": {},
   "current_map": {
-    "id": "c5c3f663-771e-4dca-9648-77bff92b8b5f",
-    "name": "Standard Neon Office",
+    "id": "74191ab4-50a7-4b19-b19c-149eb221c330",
+    "name": "Open Space Studio",
     "width": 24,
     "height": 24,
     "zones": [
       {
-        "name": "Reception",
+        "name": "Dev Cluster",
         "aliases": [],
-        "x1": 1,
-        "y1": 1,
-        "x2": 5,
-        "y2": 5,
-        "color": "#00f2ff",
+        "x1": 8,
+        "y1": 8,
+        "x2": 16,
+        "y2": 16,
+        "color": "#3b82f6",
         "icon": "room"
       }
     ],
     "obstacles": [],
     "zone_data": [
       [
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border"
+        "grid_dot",
+        "none",
+        "none",
+        "none",
+        "grid_dot",
+        "none",
+        "none",
+        "none",
+        "grid_dot",
+        "none",
+        "none",
+        "none",
+        "grid_dot",
+        "none",
+        "none",
+        "none",
+        "grid_dot",
+        "none",
+        "none",
+        "none",
+        "grid_dot",
+        "none",
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -70,10 +69,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -96,10 +95,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -122,36 +121,36 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
-        "none",
-        "none",
-        "none",
-        "none",
-        "none",
-        "neon_border"
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -174,10 +173,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -200,10 +199,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -226,36 +225,36 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
-        "none",
-        "none",
-        "none",
-        "none",
-        "none",
-        "neon_border"
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -278,10 +277,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -304,10 +303,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -330,36 +329,36 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
-        "none",
-        "none",
-        "none",
-        "none",
-        "none",
-        "neon_border"
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -382,10 +381,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -408,10 +407,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -434,36 +433,36 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
-        "none",
-        "none",
-        "none",
-        "none",
-        "none",
-        "neon_border"
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -486,10 +485,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -512,10 +511,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -538,36 +537,36 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
         "none",
+        "grid_dot",
         "none",
         "none",
-        "none",
-        "none",
-        "none",
-        "none",
-        "none",
-        "neon_border"
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -590,10 +589,10 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
         "none",
         "none",
         "none",
@@ -616,33 +615,34 @@
         "none",
         "none",
         "none",
-        "neon_border"
+        "none",
+        "none"
       ],
       [
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border",
-        "neon_border"
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none"
       ]
     ]
   },
@@ -665,24 +665,7 @@
           "icon": "room"
         }
       ],
-      "obstacles": [
-        {
-          "x": 7,
-          "y": 10,
-          "type": "obstacle_desk",
-          "rotation": 0,
-          "flip_x": false,
-          "owner_id": null
-        },
-        {
-          "x": 6,
-          "y": 15,
-          "type": "obstacle_desk",
-          "rotation": 0,
-          "flip_x": false,
-          "owner_id": null
-        }
-      ],
+      "obstacles": [],
       "zone_data": [
         [
           "neon_border",

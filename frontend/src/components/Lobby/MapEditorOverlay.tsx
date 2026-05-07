@@ -211,6 +211,30 @@ export const MapEditorOverlay = ({
                </div>
             </div>
 
+            <div>
+              <h3 className="text-[10px] font-black text-[#00f2ff]/50 uppercase tracking-[0.2em] mb-3 italic">Floor Finishes</h3>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                 {[
+                   { id: 'neon_border',    label: '네온 테두리', color: '#00f2ff' },
+                   { id: 'grid_dot',       label: '그리드 플레이트', color: '#333' },
+                   { id: 'premium_carpet', label: '퍼플 카펫', color: '#4b0082' },
+                   { id: 'wood',           label: '퓨처 우드', color: '#5d4037' },
+                   { id: 'metal',          label: '메탈 플레이트', color: '#78909c' },
+                   { id: 'glass',          label: '데이터 스트림', color: '#00bcd4' },
+                   { id: 'concrete',       label: '인더스트리얼', color: '#546e7a' },
+                 ].map(f => (
+                   <button
+                     key={f.id}
+                     onClick={() => { setBuildBrush(f.id); setSelectedModule(null); }}
+                     className={`p-2 border-2 flex items-center gap-2 transition-all ${brush === f.id ? 'border-[#00f2ff] bg-[#00f2ff]/10' : 'border-white/5 bg-white/5 text-white/40 hover:border-white/20'}`}
+                   >
+                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: f.color }} />
+                     <span className="text-[9px] font-bold">{f.label}</span>
+                   </button>
+                 ))}
+              </div>
+           </div>
+
            <div>
               <h3 className="text-[10px] font-black text-[#00f2ff]/50 uppercase tracking-[0.2em] mb-3 italic">Zone Brush</h3>
               <div className="grid grid-cols-2 gap-2">
