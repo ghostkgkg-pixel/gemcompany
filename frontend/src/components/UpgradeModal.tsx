@@ -1,6 +1,6 @@
 import React from 'react';
 import { Star } from 'lucide-react';
-import { upgradePlan } from '../services/api';
+import { AccountService } from '../services/AccountService';
 import { useGameStore } from '../store/useGameStore';
 
 export const UpgradeModal = () => {
@@ -10,7 +10,7 @@ export const UpgradeModal = () => {
 
   const onUpgrade = async (plan: string) => {
     try {
-      await upgradePlan(plan);
+      await AccountService.upgradePlan(plan);
       setSubscriptionPlan(plan);
       onClose(false);
     } catch (err) {

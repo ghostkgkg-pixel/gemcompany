@@ -280,6 +280,16 @@ async def chat_with_agent(agent_id: str, message: str):
     await broadcast_agents()
     return agent
 
+@app.post("/agents/{agent_id}/move")
+async def move_agent_endpoint(agent_id: str, x: int, y: int):
+    if agent_id not in state.agents: raise HTTPException(404, "Agent not found")
+    agent = state.agents[agent_id]
+    agent.target_x = x
+    agent.target_y = y
+    agent.current_action = f"Moving to ({x}, {y})"
+    await broadcast_agents()
+    return agent
+
 # --- Socket.io Events ---
 @sio.event
 async def connect(sid, environ, auth=None):

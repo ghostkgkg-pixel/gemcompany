@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Hammer, RotateCw, FlipHorizontal, Eraser, Save, X, Trash2, Box, Lock, Star, Move, User, Layout, ChevronRight } from 'lucide-react';
 import { GameCanvas } from '../GameCanvas';
-import { getMapTemplates } from '../../services/api';
+import { MapService } from '../../services/MapService';
 import { useGameStore } from '../../store/useGameStore';
 
 interface MapEditorOverlayProps {
@@ -46,7 +46,7 @@ export const MapEditorOverlay = ({
     if (isOpen) {
       const fetchTemplates = async () => {
         try {
-          const data = await getMapTemplates();
+          const data = await MapService.getTemplates();
           setSavedMaps(Object.values(data.modules || {}));
           setDefaultTemplates(data.defaults || {});
         } catch (err) {

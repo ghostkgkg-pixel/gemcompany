@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { GameCanvas } from './GameCanvas';
 import { useGameStore } from '../store/useGameStore';
-import { getMapCurrent, moveAgent, chatWithAgent, fireAgent } from '../services/api';
+import { MapService } from '../services/MapService';
+import { AgentService } from '../services/AgentService';
 import { initSocket } from '../services/socket';
 import { Users, Navigation, MessageCircle, Share2, LogOut, X } from 'lucide-react';
 import { KnowledgeGraph } from './GraphView/KnowledgeGraph';
@@ -30,7 +31,7 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const m = await getMapCurrent();
+        const m = await MapService.getCurrentMap();
         setMap(m);
       } catch (err) {
         console.error("Data fetch failed:", err);
@@ -47,7 +48,7 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
     
     setIsSending(true);
     try {
-      await chatWithAgent(selectedAgentId, chatMessage);
+      await AgentService.chatWithAgent(selectedAgentId, chatMessage);
       setChatMessage('');
     } catch (err) {
       console.error("Chat failed:", err);
@@ -58,7 +59,7 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
 
   const handleFireAgent = async (agentId: string) => {
     try {
-      await fireAgent(agentId);
+      await AgentService.fireAgent(agentId);
       setSelectedAgentId(null);
       setFireConfirmId(null);
     } catch (err: any) {

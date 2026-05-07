@@ -26,5 +26,10 @@ export const AgentService = {
   async chatWithAgent(agentId: string, message: string) {
     const res = await axios.post(`${API_BASE}/agents/${agentId}/chat?message=${encodeURIComponent(message)}`);
     return res.data;
+  },
+
+  async moveAgent(agentId: string, x: number, y: number) {
+    const res = await axios.post(`${API_BASE}/agents/${agentId}/move?x=${x}&y=${y}`);
+    return res.data;
   }
 };
