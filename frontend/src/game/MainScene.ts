@@ -168,7 +168,7 @@ export class MainScene extends Phaser.Scene {
     const { undo } = useGameStore.getState();
     const lastMap = undo();
     if (lastMap) {
-      await syncMapData(lastMap);
+      await MapService.syncMapData(lastMap);
       this.syncMap(lastMap);
     }
   }

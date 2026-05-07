@@ -39,12 +39,12 @@ export const MapService = {
   },
 
   async addZone(name: string, x1: number, y1: number, x2: number, y2: number, color: string) {
-    const res = await axios.post(`${API_BASE}/map/zones/add?name=${encodeURIComponent(name)}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&color=${encodeURIComponent(color)}`);
+    const res = await axios.post(`${API_BASE}/map/zones/add`, { name, x1, y1, x2, y2, color });
     return res.data;
   },
 
   async removeZone(name: string) {
-    const res = await axios.post(`${API_BASE}/map/zones/remove?name=${encodeURIComponent(name)}`);
+    const res = await axios.post(`${API_BASE}/map/zones/remove`, { name });
     return res.data;
   },
 

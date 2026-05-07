@@ -126,7 +126,7 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     if (!spawnDesc.trim()) return;
     setIsSpawning(true);
     try {
-      await spawnAgent(spawnDesc);
+      await AgentService.spawnAgent(spawnDesc);
       setSpawnDesc('');
     } catch (err) {
       console.error("Spawn failed:", err);
@@ -138,7 +138,7 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
   const handleHire = async () => {
     setIsSpawning(true);
     try {
-      await hireAgent(hiringForm);
+      await AgentService.hireAgent(hiringForm);
       setIsHiringModalOpen(false);
       setHiringForm({
         name: '', job: '', persona: '', body: 'body_light',
@@ -179,7 +179,7 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
   const handleDeleteTemplate = async (id: string) => {
     if (!window.confirm(`'${id}' 맵을 삭제하시겠습니까?`)) return;
     try {
-      await deleteMap(id);
+      await MapService.deleteMap(id);
       await fetchTemplates();
     } catch (err) {
       console.error("Failed to delete map:", err);
@@ -248,9 +248,7 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     if (!newZoneName.trim() || !newZoneRange) return;
     try {
       const { x1, y1, x2, y2 } = newZoneRange;
-      await MapService.addZone({
-        name: newZoneName, x1, y1, x2, y2, color: newZoneColor
-      });
+      await MapService.addZone(newZoneName, x1, y1, x2, y2, newZoneColor);
       setIsZoneModalOpen(false);
       setNewZoneName('');
       const m = await MapService.getCurrentMap();

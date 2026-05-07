@@ -68,3 +68,16 @@ class ZoneCreateRequest(BaseModel):
 
 class ZoneRemoveRequest(BaseModel):
     name: str
+
+class AgentHireRequest(BaseModel):
+    name: str
+    job: str
+    persona: str
+    body: str
+    hair_style: str
+    hair_color: str
+    outfit: str
+    gender: str
+
+class AgentSpawnRequest(BaseModel):
+    description: str

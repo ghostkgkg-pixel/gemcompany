@@ -15,7 +15,10 @@ from fastapi.staticfiles import StaticFiles
 
 # Modular Imports
 import state
-from schemas import Agent, MapTemplate, MapZone, MapObstacle, ZoneCreateRequest, ZoneRemoveRequest
+from schemas import (
+    Agent, MapTemplate, MapZone, MapObstacle, ZoneCreateRequest, ZoneRemoveRequest,
+    AgentHireRequest, AgentSpawnRequest, Task
+)
 from utils import (
     sanitize_filename, append_work_history, zone_summary_for_agent, 
     set_agent_action
@@ -249,11 +252,14 @@ async def list_agents():
     return [a.model_dump() for a in state.agents.values()]
 
 @app.post("/agents/hire")
-async def hire_agent(name: str, job: str, persona: str, body: str, hair_style: str, hair_color: str, outfit: str, gender: str):
-    persona_data = {"Name": name, "Job": job, "Description": persona}
-    appearance = {"body": body, "hair_style": hair_style, "hair_color": hair_color, "outfit": outfit, "gender": gender}
+async def hire_agent(req: AgentHireRequest):
+    persona_data = {"Name": req.name, "Job": req.job, "Description": req.persona}
+    appearance = {
+        "body": req.body, "hair_style": req.hair_style, "hair_color": req.hair_color, 
+        "outfit": req.outfit, "gender": req.gender
+    }
     new_agent = Agent(
-        id=str(uuid.uuid4())[:8], name=name, persona=persona_data, stats={}, x=2, y=2,
+        id=str(uuid.uuid4())[:8], name=req.name, persona=persona_data, stats={}, x=2, y=2,
         current_action="Idle", current_thought="Ready", current_speech="Hello!",
         appearance=appearance
     )
@@ -262,6 +268,28 @@ async def hire_agent(name: str, job: str, persona: str, body: str, hair_style: s
     state.save_state()
     await broadcast_agents()
     return new_agent
+
+@app.post("/agents/spawn")
+async def spawn_agent_endpoint(req: AgentSpawnRequest):
+    # This triggers the autonomous generation of a new agent persona and appearance
+    # For now, we'll create a basic one and let the autonomous loop handle further logic
+    new_id = str(uuid.uuid4())[:8]
+    new_agent = Agent(
+        id=new_id, name=f"Agent_{new_id}", 
+        persona={"Job": req.description, "Role": req.description},
+        stats={}, x=2, y=2, current_action="Idle", current_thought="Initializing...",
+        current_speech="시스템에 접속했습니다."
+    )
+    initialize_agent_profile(new_agent)
+    state.agents[new_id] = new_agent
+    state.save_state()
+    await broadcast_agents()
+    
+    # Push a classified task to the queue for "Identity Refinement"
+    prompt = f"당신은 신입 에이전트입니다. 당신의 역할은 '{req.description}'입니다. 당신의 페르소나를 구체화하고 첫 인사를 건네세요."
+    state.interactive_queue.put_nowait(Task(priority=1, agent_id=new_id, prompt=prompt, model=FAST_MODEL))
+    
+    return {"status": "ok", "agent_id": new_id}
 
 @app.delete("/agents/{agent_id}")
 async def fire_agent(agent_id: str):
