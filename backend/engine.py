@@ -20,7 +20,7 @@ async def world_tick_loop(sio_callback):
     while True:
         try:
             m = state.current_map or state.MAP_TEMPLATES["standard_office"]
-            astar = AStar(m.width, m.height, m.obstacles)
+            astar = AStar(m.width, m.height, [(o.x, o.y) for o in m.obstacles])
             
             for agent in list(state.agents.values()):
                 async with get_agent_lock(agent.id):
