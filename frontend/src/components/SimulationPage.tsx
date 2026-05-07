@@ -82,8 +82,8 @@ export function SimulationPage({ onGoBack }: SimulationPageProps) {
   return (
     <div className="w-full h-screen bg-[#0a0f1e] text-[#00f2ff] font-['NeoDunggeunmo'] flex flex-col relative overflow-hidden scanline-effect">
       
-      {/* Background Ambience (Global Overlay for consistent CRT texture) */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none z-[100]">
+      {/* Background Ambience (Background Layer) */}
+      <div className="absolute inset-0 opacity-10 pointer-events-none z-0">
         <div className="absolute inset-0 bg-[radial-gradient(#00f2ff_1px,transparent_1px)] [background-size:20px_20px]" />
       </div>
 

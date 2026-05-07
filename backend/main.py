@@ -105,24 +105,11 @@ MAP_TEMPLATES = {
     "standard_office": MapTemplate(
         id="standard_office",
         name="Gem Company Headquarters",
-        width=40,
-        height=20,
-        zones=[
-            MapZone(name="Meeting Room", aliases=["회의실", "미팅룸", "meeting"], x1=0, y1=0, x2=10, y2=8, color="#e3f2fd", icon="groups"),
-            MapZone(name="Work Zone A", aliases=["업무 A구역", "사무실1", "work1"], x1=12, y1=0, x2=25, y2=12, color="#f5f5f5", icon="desktop_windows"),
-            MapZone(name="Work Zone B", aliases=["업무 B구역", "사무실2", "work2"], x1=27, y1=0, x2=39, y2=12, color="#f5f5f5", icon="desktop_windows"),
-            MapZone(name="Break Area", aliases=["휴게실", "카페", "break"], x1=0, y1=10, x2=10, y2=19, color="#e8f5e9", icon="coffee"),
-            MapZone(name="Research Lab", aliases=["연구실", "실험실", "lab"], x1=12, y1=14, x2=25, y2=19, color="#fff3e0", icon="science"),
-            MapZone(name="CEO Office", aliases=["대표실", "사장실", "ceo"], x1=27, y1=14, x2=39, y2=19, color="#f3e5f5", icon="stars"),
-        ],
-        obstacles=[
-            # Divider Walls (Vertical)
-            *[MapObstacle(x=11, y=i, type="obstacle_plant") for i in range(20)],
-            *[MapObstacle(x=26, y=i, type="obstacle_plant") for i in range(20)],
-            # Horizontal Dividers
-            *[MapObstacle(x=i, y=9, type="obstacle_plant") for i in range(11)],
-            *[MapObstacle(x=i, y=13, type="obstacle_plant") for i in range(12, 40)],
-        ],
+        width=24,
+        height=24,
+        zone_data=[["none" for _ in range(24)] for _ in range(24)],
+        zones=[],
+        obstacles=[],
     )
 }
 

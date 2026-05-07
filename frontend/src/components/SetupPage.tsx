@@ -156,7 +156,7 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     <div className="w-full h-screen bg-[#0a0f1e] flex flex-col font-['NeoDunggeunmo'] text-[#00f2ff] p-0 scanline-effect relative overflow-hidden">
 
       {/* Background Ambience */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none z-[0]">
+      <div className="absolute inset-0 opacity-10 pointer-events-none z-0">
         <div className="absolute inset-0 bg-[radial-gradient(#00f2ff_1px,transparent_1px)] [background-size:20px_20px]" />
       </div>
 

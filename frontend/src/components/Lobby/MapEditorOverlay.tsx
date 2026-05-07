@@ -90,11 +90,18 @@ export const MapEditorOverlay = ({
                     <span className="text-[9px] font-bold">메인프레임</span>
                  </button>
                  <button 
+                   onClick={() => setBuildBrush('tile_eraser')}
+                   className={`p-3 border-2 flex flex-col items-center gap-1 transition-all ${brush === 'tile_eraser' ? 'border-orange-500 bg-orange-500/10 text-white' : 'border-white/5 bg-white/5 text-white/40 hover:border-white/20'}`}
+                 >
+                    <Eraser size={20} className="text-orange-500" />
+                    <span className="text-[9px] font-bold">플랫폼 삭제</span>
+                 </button>
+                 <button 
                    onClick={() => setBuildBrush('eraser')}
-                   className={`p-3 border-2 flex flex-col items-center gap-1 transition-all col-span-2 ${brush === 'eraser' ? 'border-red-500 bg-red-500/10 text-white' : 'border-white/5 bg-white/5 text-white/40 hover:border-white/20'}`}
+                   className={`p-3 border-2 flex flex-col items-center gap-1 transition-all ${brush === 'eraser' ? 'border-red-500 bg-red-500/10 text-white' : 'border-white/5 bg-white/5 text-white/40 hover:border-white/20'}`}
                  >
                     <Eraser size={20} />
-                    <span className="text-[9px] font-bold">디지털 이레이저</span>
+                    <span className="text-[9px] font-bold">에셋 삭제</span>
                  </button>
               </div>
            </div>

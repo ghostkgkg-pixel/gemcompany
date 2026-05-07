@@ -91,8 +91,10 @@ export class MainScene extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     this.cameras.main.setZoom(0.6);
 
-    this.input.on('wheel', (p: any, go: any, dx: number, dy: number) => {
-      this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom - dy * 0.001, 0.3, 2.0));
+    this.input.on('wheel', (pointer: Phaser.Input.Pointer, over: any, deltaX: number, deltaY: number) => {
+      const zoomSensitivity = 0.001;
+      const newZoom = Phaser.Math.Clamp(this.cameras.main.zoom - deltaY * zoomSensitivity, 0.3, 2.0);
+      this.cameras.main.setZoom(newZoom);
     });
 
     this.scale.on('resize', () => {
@@ -134,7 +136,7 @@ export class MainScene extends Phaser.Scene {
         else if (selectedTool.includes('server')) frame = 12;
         this.previewSprite.setTexture('furniture_sheet').setFrame(frame).setOrigin(0.5, 0.78).setDisplaySize(this.tileWidth * 1.3, this.tileWidth * 1.3);
       }
-    } else if (buildMode && selectedTool.startsWith('zone_') && this.dragStart) {
+    } else if (buildMode && (selectedTool.startsWith('zone_') || selectedTool === 'tile_eraser') && this.dragStart) {
       this.previewContainer.setVisible(false);
       this.drawSelection(this.dragStart, cart);
     } else {
@@ -163,42 +165,59 @@ export class MainScene extends Phaser.Scene {
     const mapCenter = this.cartToIso(data.width / 2, data.height / 2);
     this.mapContainer.setPosition(canvasW / 2 - mapCenter.x, canvasH / 2 - mapCenter.y);
 
-    const foundation = this.add.graphics();
-    foundation.fillStyle(0x05080f, 1);
-    const pLeft = this.cartToIso(0, data.height), pBottom = this.cartToIso(data.width, data.height), pRight = this.cartToIso(data.width, 0);
-    foundation.fillPoints([pLeft, pBottom, { x: pBottom.x, y: pBottom.y + 40 }, { x: pLeft.x, y: pLeft.y + 40 }], true);
-    foundation.fillStyle(0x03050a, 1);
-    foundation.fillPoints([pBottom, pRight, { x: pRight.x, y: pRight.y + 40 }, { x: pBottom.x, y: pBottom.y + 40 }], true);
-    this.mapLayer.add(foundation);
-
     for (let j = 0; j < data.height; j++) {
       for (let i = 0; i < data.width; i++) {
         const iso = this.cartToIso(i, j);
         const z = data.zone_data?.[j]?.[i];
+        const hasObs = this.hasObstacleAt(data, i, j);
+        const isBuild = useGameStore.getState().buildMode;
+        
+        // Skip rendering if void and not in build mode
+        if (z === 'void' && !isBuild) continue;
+
         const cx = iso.x, cy = iso.y + this.tileHeight / 2;
         const tw = this.tileWidth, th = this.tileHeight;
+        const thickness = 12;
 
-        // Base spaceship panel tile
         const tile = this.add.graphics().setDepth(iso.y);
-        tile.fillStyle(0x3a3d45, 1);
+        let alpha = 1.0;
+        if (z === 'void' && isBuild) alpha = 0.1;
+        else if (z === 'none' && !hasObs && isBuild) alpha = 0.15;
+
+        // 1. Bottom Glow (Floating Effect)
+        if (alpha > 0.5) {
+          tile.lineStyle(4, 0x00f2ff, 0.2);
+          tile.strokePoints([{x: cx, y: cy + th/2 + thickness + 4}, {x: cx + tw/2, y: cy + thickness + 4}, {x: cx, y: cy - th/2 + thickness + 4}, {x: cx - tw/2, y: cy + thickness + 4}], true);
+        }
+
+        // 2. Side Faces (Thickness)
+        const sideColor = 0x1a1d25;
+        tile.fillStyle(sideColor, alpha);
+        // Front-Left Face
+        tile.fillPoints([{x: cx - tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx, y: cy + th/2 + thickness}, {x: cx - tw/2, y: cy + thickness}], true);
+        // Front-Right Face
+        tile.fillPoints([{x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx, y: cy + th/2 + thickness}, {x: cx + tw/2, y: cy + thickness}], true);
+
+        // 3. Top Face
+        const topColor = z ? 0x2a2d35 : 0x3a3d45;
+        tile.fillStyle(topColor, alpha);
         tile.fillPoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
-        tile.lineStyle(1, 0x4a4d55, 0.3);
+        
+        // 4. Panel details
+        tile.lineStyle(1, 0x4a4d55, 0.3 * alpha);
         tile.strokePoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
-        tile.lineStyle(1, 0x4a4d55, 0.12);
-        tile.lineBetween(cx - tw/4, cy - th/4, cx + tw/4, cy - th/4);
-        tile.lineBetween(cx - tw/4, cy + th/4, cx + tw/4, cy + th/4);
         this.mapLayer.add(tile);
 
         // Zone overlay (editor only)
-        if (z && useGameStore.getState().buildMode) {
+        if (z && isBuild) {
           const zoneColors: Record<string, number> = {
             work: 0x4488ff, meeting: 0x44ff88, break: 0xffcc44, lab: 0xaa44ff, ceo: 0xff4444
           };
           const zc = zoneColors[z] || 0x4488ff;
           const ov = this.add.graphics().setDepth(iso.y + 0.5);
-          ov.fillStyle(zc, 0.2);
+          ov.fillStyle(zc, 0.25);
           ov.fillPoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
-          ov.lineStyle(1, zc, 0.5);
+          ov.lineStyle(2, zc, 0.6);
           ov.strokePoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
           this.mapLayer.add(ov);
         }
@@ -255,6 +274,14 @@ export class MainScene extends Phaser.Scene {
     const x1 = Math.min(s.x, e.x), y1 = Math.min(s.y, e.y), x2 = Math.max(s.x, e.x), y2 = Math.max(s.y, e.y);
     try {
       if (selectedTool === 'eraser') await removeObstacle(e.x, e.y);
+      else if (selectedTool === 'tile_eraser') {
+        for (let j = y1; j <= y2; j++) {
+          for (let i = x1; i <= x2; i++) {
+            await setZoneTile(i, j, 'void');
+            if (this.hasObstacleAt(useGameStore.getState().currentMap, i, j)) await removeObstacle(i, j);
+          }
+        }
+      }
       else if (selectedTool.startsWith('zone_')) {
         for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) await setZoneTile(i, j, selectedTool.replace('zone_', ''));
       } else if (selectedTool.startsWith('obstacle_')) {
