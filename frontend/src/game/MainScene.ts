@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { useGameStore } from '../store/useGameStore';
-import { placeObstacle, removeObstacle, setZoneTile, getMapCurrent, mergeMap, syncMapData, mergeMapRawData, assignObstacle } from '../services/api';
+import { MapService } from '../services/MapService';
 
 export class MainScene extends Phaser.Scene {
   constructor() { super('MainScene'); }
@@ -466,13 +466,13 @@ export class MainScene extends Phaser.Scene {
     const y2 = Phaser.Math.Clamp(Math.max(s.y, e.y), 0, currentMap.height - 1);
 
     try {
-      if (selectedTool === 'eraser') await removeObstacle(e.x, e.y);
+      if (selectedTool === 'eraser') await MapService.removeObstacle(e.x, e.y);
       else if (selectedTool === 'module_stamp' && selectedModule) {
-        const res = await mergeMap(selectedModule, e.x, e.y);
+        const res = await MapService.mergeMap(selectedModule, e.x, e.y);
         if (res.map) useGameStore.getState().setMap(res.map);
       }
       else if (selectedTool === 'move_stamp' && useGameStore.getState().moveBuffer) {
-        const res = await mergeMapRawData(useGameStore.getState().moveBuffer, e.x, e.y);
+        const res = await MapService.syncMapData(useGameStore.getState().moveBuffer); // Re-sync buffer as map
         if (res.map) useGameStore.getState().setMap(res.map);
         useGameStore.getState().setSelectedTool('move_tool');
         useGameStore.getState().setMoveBuffer(null);
@@ -484,14 +484,13 @@ export class MainScene extends Phaser.Scene {
         const bufferObs = m.obstacles.filter((o: any) => o.x >= x1 && o.x <= x2 && o.y >= y1 && o.y <= y2)
                                      .map((o: any) => ({ ...o, x: o.x - x1, y: o.y - y1 }));
         
-        // Ensure ALL required MapTemplate fields are present
         const buffer = { 
           id: 'temp_move', 
           name: 'MoveBuffer', 
           width: newW, 
           height: newH, 
           zone_data: bufferZone, 
-          zones: [], // Fixed: Missing field caused 422 error
+          zones: [], 
           obstacles: bufferObs 
         };
         
@@ -501,18 +500,18 @@ export class MainScene extends Phaser.Scene {
         for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) updatedMap.zone_data[j][i] = 'void';
         updatedMap.obstacles = m.obstacles.filter((o: any) => !(o.x >= x1 && o.x <= x2 && o.y >= y1 && o.y <= y2));
         
-        await syncMapData(updatedMap);
+        await MapService.syncMapData(updatedMap);
         this.syncMap(updatedMap);
         useGameStore.getState().setSelectedTool('move_stamp');
       }
       else if (selectedTool === 'tile_eraser') {
         for (let j = y1; j <= y2; j++) {
           for (let i = x1; i <= x2; i++) {
-            await setZoneTile(i, j, 'void');
-            if (this.hasObstacleAt(useGameStore.getState().currentMap, i, j)) await removeObstacle(i, j);
+            await MapService.setZoneTile(i, j, 'void');
+            if (this.hasObstacleAt(useGameStore.getState().currentMap, i, j)) await MapService.removeObstacle(i, j);
           }
         }
-        const updatedMap = await getMapCurrent();
+        const updatedMap = await MapService.getCurrentMap();
         useGameStore.getState().setMap(updatedMap);
       }
       else if (selectedTool === 'assign_seat') {
@@ -529,17 +528,17 @@ export class MainScene extends Phaser.Scene {
             nextOwner = agentIds[currentIndex + 1];
           }
           
-          await assignObstacle(e.x, e.y, nextOwner);
+          await MapService.assignObstacle(e.x, e.y, nextOwner);
         }
       }
       else if (selectedTool.startsWith('zone_')) {
-        for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) await setZoneTile(i, j, selectedTool.replace('zone_', ''));
-        const updatedMap = await getMapCurrent();
+        for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) await MapService.setZoneTile(i, j, selectedTool.replace('zone_', ''));
+        const updatedMap = await MapService.getCurrentMap();
         useGameStore.getState().setMap(updatedMap);
       } else if (selectedTool.startsWith('obstacle_')) {
         const { selectedRotation, selectedFlipX } = useGameStore.getState();
-        await placeObstacle(e.x, e.y, selectedTool, selectedRotation, selectedFlipX);
-        const updatedMap = await getMapCurrent();
+        await MapService.placeObstacle(e.x, e.y, selectedTool, selectedRotation, selectedFlipX);
+        const updatedMap = await MapService.getCurrentMap();
         useGameStore.getState().setMap(updatedMap);
       }
     } catch (err) {

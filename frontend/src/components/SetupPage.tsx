@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
-import { spawnAgent, hireAgent, saveMap, deleteMap, getMapCurrent } from '../services/api';
+import { MapService } from '../services/MapService';
+import { AgentService } from '../services/AgentService';
+import { AccountService } from '../services/AccountService';
+import { CompanyService } from '../services/CompanyService';
 import { useGameStore } from '../store/useGameStore';
 import { Building, ArrowLeft } from 'lucide-react';
 
@@ -94,8 +96,8 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
 
   const fetchPlan = async () => {
     try {
-      const res = await axios.get('http://localhost:8000/account/plan');
-      useGameStore.getState().setSubscriptionPlan(res.data.plan);
+      const data = await AccountService.getPlan();
+      useGameStore.getState().setSubscriptionPlan(data.plan);
     } catch (err) {
       console.error("Failed to fetch plan:", err);
     }
@@ -103,9 +105,9 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
 
   const fetchTemplates = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/map/templates');
-      setTemplates(response.data);
-      const comps = response.data.companies || {};
+      const data = await MapService.getTemplates();
+      setTemplates(data);
+      const comps = data.companies || {};
       useGameStore.getState().setCompanies(comps);
       
       const { selectedCompanyId, setMap, setSelectedCompanyId } = useGameStore.getState();
@@ -148,22 +150,21 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
       setIsSpawning(false);
     }
   };
-
   const handleSelectTemplate = async (id: string) => {
     const { setMap, setSelectedCompanyId } = useGameStore.getState();
     try {
       if (templates.defaults && templates.defaults[id]) {
         const name = prompt("새 회사의 이름을 입력하세요:", templates.defaults[id].name);
         if (!name) return;
-        const res = await axios.post(`http://localhost:8000/company/create?name=${name}&template_id=${id}`);
-        setMap(res.data.company);
-        setSelectedCompanyId(res.data.company.id);
+        const res = await CompanyService.createCompany(name, id);
+        setMap(res.company);
+        setSelectedCompanyId(res.company.id);
         fetchTemplates();
       } else if (templates.companies && templates.companies[id]) {
         const company = templates.companies[id];
         setMap(company);
         setSelectedCompanyId(company.id);
-        await axios.post('http://localhost:8000/map/sync', company);
+        await MapService.syncMapData(company);
       }
     } catch (err) {
       console.error("Selection failed:", err);
