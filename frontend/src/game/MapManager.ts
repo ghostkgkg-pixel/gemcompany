@@ -8,7 +8,7 @@ import { useGameStore } from '../store/useGameStore';
 export class MapManager {
     constructor(
         private scene: Phaser.Scene,
-        private mapLayer: Phaser.GameObjects.Container,
+        private floorLayer: Phaser.GameObjects.Container,
         private iso: IsometricManager
     ) {}
 
@@ -16,7 +16,7 @@ export class MapManager {
      * 전체 맵 데이터를 기반으로 화면에 타일 및 그리드를 다시 그림
      */
     render(data: any) {
-        this.mapLayer.removeAll(true);
+        this.floorLayer.removeAll(true);
         
         const tw = this.iso.tileWidth;
         const th = this.iso.tileHeight;
@@ -55,7 +55,7 @@ export class MapManager {
                         floorSprite.setAlpha(1);
                     }
                     
-                    this.mapLayer.add(floorSprite);
+                    this.floorLayer.add(floorSprite);
                 } else if (isBuildMode) {
                     this.renderGridTile(pos, tw, th);
                 }
@@ -108,6 +108,6 @@ export class MapManager {
             { x: pos.x, y: pos.y + th / 2 },
             { x: pos.x - tw / 2, y: pos.y }
         ], true);
-        this.mapLayer.add(grid);
+        this.floorLayer.add(grid);
     }
 }

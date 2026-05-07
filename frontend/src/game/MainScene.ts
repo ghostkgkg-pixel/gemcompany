@@ -22,8 +22,10 @@ export class MainScene extends Phaser.Scene {
 
   // 레이어 및 상태 변수
   private mapContainer!: Phaser.GameObjects.Container;
-  private mapLayer!: Phaser.GameObjects.Container;
+  private floorLayer!: Phaser.GameObjects.Container;
+  private obstacleLayer!: Phaser.GameObjects.Container;
   private uiLayer!: Phaser.GameObjects.Container;
+  private lastObstaclesJson: string = "";
   private unsubscribers: (() => void)[] = [];
 
   /**
@@ -39,13 +41,14 @@ export class MainScene extends Phaser.Scene {
   create() {
     // 배경색 및 기본 레이어 설정
     this.cameras.main.setBackgroundColor('#05080f');
-    this.mapLayer = this.add.container(0, 0);
+    this.floorLayer = this.add.container(0, 0);
+    this.obstacleLayer = this.add.container(0, 0);
     this.mapContainer = this.add.container(0, 0);
     this.uiLayer = this.add.container(0, 0);
-    this.mapContainer.add([this.mapLayer, this.uiLayer]);
+    this.mapContainer.add([this.floorLayer, this.obstacleLayer, this.uiLayer]);
 
     // 매니저 인스턴스 생성
-    this.map = new MapManager(this, this.mapLayer, this.isometric);
+    this.map = new MapManager(this, this.floorLayer, this.isometric);
     this.agents = new AgentManager(this, this.isometric);
     this.interaction = new InteractionManager(this, this.mapContainer, this.isometric);
 
@@ -142,14 +145,22 @@ export class MainScene extends Phaser.Scene {
     
     console.log(`[MainScene] Syncing Map: ${data.name} (${data.width}x${data.height}), Obstacles: ${data.obstacles?.length || 0}`);
 
-    // 맵 렌더링 (MapManager에 위임)
+    // 맵 렌더링 (MapManager에 위임) - 바닥 레이어만 업데이트
     this.map.render(data);
     
     // 맵 중앙 정렬 계산
     const mapCenter = this.isometric.cartToIso(data.width / 2, data.height / 2);
     this.mapContainer.setPosition(canvasW / 2 - mapCenter.x, canvasH / 2 - mapCenter.y);
 
-    // 장애물(가구) 렌더링 - 필요 시 MapManager 내부로 더 이관 가능
+    // 장애물(가구) 데이터 변경 체크 (존만 변경 시 가구 재렌더링 방지)
+    const currentObsJson = JSON.stringify(data.obstacles || []);
+    if (this.lastObstaclesJson === currentObsJson) {
+        return; // 가구 데이터가 동일하면 렌더링 스킵
+    }
+    this.lastObstaclesJson = currentObsJson;
+    this.obstacleLayer.removeAll(true);
+
+    // 장애물(가구) 렌더링
     if (data.obstacles && data.obstacles.length > 0) {
         const { agents } = useGameStore.getState();
         data.obstacles.forEach((obs: any) => {
@@ -176,14 +187,15 @@ export class MainScene extends Phaser.Scene {
                     // 소유자 이름표 표시
                     if (obs.owner_id && agents[obs.owner_id]) {
                         const ownerName = agents[obs.owner_id].name;
-                        this.mapLayer.add(this.add.text(iso.x, cy - 60, `[ ${ownerName} ]`, { 
+                        const label = this.add.text(iso.x, cy - 60, `[ ${ownerName} ]`, { 
                             fontFamily: 'NeoDunggeunmo', fontSize: '12px', color: '#00f2ff' 
-                        }).setOrigin(0.5).setDepth(iso.y + 250));
+                        }).setOrigin(0.5).setDepth(iso.y + 250);
+                        this.obstacleLayer.add(label);
                     }
                 }
             }
             
-            if (sprite) this.mapLayer.add(sprite);
+            if (sprite) this.obstacleLayer.add(sprite);
         });
     }
   }
