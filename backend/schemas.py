@@ -45,7 +45,8 @@ class MapTemplate(BaseModel):
     width: int; height: int         # 맵 크기
     zones: List[MapZone]            # 정의된 구역 목록
     obstacles: List[MapObstacle] = [] # 배치된 장애물 목록
-    zone_data: Optional[List[List[str]]] = None # 타일별 존 타입 데이터 (2D 배열)
+    zone_data: Optional[List[List[str]]] = None # 타일별 존 타입 데이터 (오버레이용)
+    floor_data: Optional[List[List[str]]] = None # 타일별 바닥재 데이터 (에셋용)
 
 class Agent(BaseModel):
     """

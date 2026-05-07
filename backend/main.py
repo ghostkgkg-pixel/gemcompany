@@ -218,6 +218,17 @@ async def set_zone_tile(x: int, y: int, zone_type: str):
     await sio.emit("map_update", state.current_map.model_dump())
     return {"status": "ok"}
 
+@app.post("/map/floors/set")
+async def set_floor_tile(x: int, y: int, floor_type: str):
+    """타일별 바닥재(Flooring) 타입 설정"""
+    if not state.current_map: raise HTTPException(400, "No map selected")
+    if not state.current_map.floor_data:
+        state.current_map.floor_data = [["none" for _ in range(state.current_map.width)] for _ in range(state.current_map.height)]
+    state.current_map.floor_data[y][x] = floor_type
+    state.save_state()
+    await sio.emit("map_update", state.current_map.model_dump())
+    return {"status": "ok"}
+
 @app.post("/map/zones/add")
 async def add_zone(req: ZoneCreateRequest):
     """새로운 커스텀 존 정의 추가"""

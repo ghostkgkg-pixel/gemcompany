@@ -20,44 +20,39 @@ export class MapManager {
         
         const tw = this.iso.tileWidth;
         const th = this.iso.tileHeight;
+        const isBuildMode = useGameStore.getState().buildMode;
 
         for (let j = 0; j < data.height; j++) {
             for (let i = 0; i < data.width; i++) {
                 const pos = this.iso.cartToIso(i, j);
+                const rx = Math.round(pos.x), ry = Math.round(pos.y);
+                
+                // 1. 바닥 타일 (Flooring) 렌더링 - 항상 보임
+                const floorType = data.floor_data?.[j]?.[i] || 'none';
+                if (floorType !== 'void') {
+                    const frame = this.getFloorFrame(floorType);
+                    if (frame !== -1) {
+                        const floorSprite = this.scene.add.sprite(rx, ry, 'floor_sheet', frame)
+                            .setDisplaySize(tw, tw)
+                            .setOrigin(0.5, 0.25)
+                            .setDepth((i + j) * 0.01 - 100);
+                        this.floorLayer.add(floorSprite);
+                    } else if (isBuildMode) {
+                        this.renderGridTile(pos, tw, th);
+                    }
+                }
+
+                // 2. 구역 오버레이 (Zone) 렌더링 - 에디터 모드에서만 반투명하게 보임
                 const zoneType = data.zone_data?.[j]?.[i] || 'none';
-                const isBuildMode = useGameStore.getState().buildMode;
-                
-                if (zoneType === 'void' && !isBuildMode) continue;
-
-                // 에셋이 포함된 프레임을 피하기 위해 기본 바닥(0) 또는 지정된 타일 사용
-                let frame = this.getFloorFrame(zoneType);
-                const isStrategicZone = ['work', 'meeting', 'break', 'ceo', 'lab'].includes(zoneType);
-                
-                // 전략 구역은 깨끗한 바닥(0)에 색상을 입히는 방식으로 렌더링 (에셋 잔상 방지)
-                if (isStrategicZone) frame = 0;
-
-                if (frame !== -1) {
-                    const rx = Math.round(pos.x), ry = Math.round(pos.y);
-                    const floorSprite = this.scene.add.sprite(rx, ry, 'floor_sheet', frame)
+                if (zoneType !== 'none' && zoneType !== 'void' && isBuildMode) {
+                    const zoneColor = this.getZoneColor(zoneType);
+                    const zoneOverlay = this.scene.add.sprite(rx, ry, 'floor_sheet', 0)
                         .setDisplaySize(tw, tw)
                         .setOrigin(0.5, 0.25)
-                        .setDepth((i + j) * 0.01 - 100);
-
-                    // 전략 구역에 색상 부여
-                    if (isStrategicZone) {
-                        const zoneColor = this.getZoneColor(zoneType);
-                        floorSprite.setTint(zoneColor);
-                        // 빌드 모드에서는 구역을 반투명하게, 평소(출근)에는 투명하게 숨김
-                        floorSprite.setAlpha(isBuildMode ? 0.6 : 0);
-                    } else if (zoneType === 'void') {
-                        floorSprite.setAlpha(isBuildMode ? 0.2 : 0);
-                    } else {
-                        floorSprite.setAlpha(1);
-                    }
-                    
-                    this.floorLayer.add(floorSprite);
-                } else if (isBuildMode) {
-                    this.renderGridTile(pos, tw, th);
+                        .setDepth((i + j) * 0.01 - 99) // 바닥 바로 위에 렌더링
+                        .setTint(zoneColor)
+                        .setAlpha(0.5);
+                    this.floorLayer.add(zoneOverlay);
                 }
             }
         }
@@ -82,8 +77,8 @@ export class MapManager {
      */
     private getFloorFrame(type: string): number {
         const frames: Record<string, number> = {
-            'none': 0, 'work': 1, 'meeting': 2, 'break': 3, 'ceo': 4, 'lab': 5,
-            'neon_border': 8, 'grid_dot': 9, 'premium_carpet': 10, 'wood': 11, 'metal': 12
+            'none': 0, 
+            'neon_border': 8, 'grid_dot': 9, 'premium_carpet': 10, 'wood': 11, 'metal': 12, 'glass': 13
         };
         return frames[type] ?? -1;
     }

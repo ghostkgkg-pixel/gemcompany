@@ -26,7 +26,8 @@ MAP_TEMPLATES = {
         name="Standard Neon Office",
         width=24,
         height=24,
-        zone_data=[
+        zone_data=[["none" for _ in range(24)] for _ in range(24)],
+        floor_data=[
             ["neon_border" if (i == 0 or i == 23 or j == 0 or j == 23) else "none" for i in range(24)]
             for j in range(24)
         ],
@@ -38,7 +39,8 @@ MAP_TEMPLATES = {
         name="Open Space Studio",
         width=24,
         height=24,
-        zone_data=[
+        zone_data=[["none" for _ in range(24)] for _ in range(24)],
+        floor_data=[
             ["grid_dot" if (i % 4 == 0 and j % 4 == 0) else "none" for i in range(24)]
             for j in range(24)
         ],
@@ -51,6 +53,10 @@ MAP_TEMPLATES = {
         width=24,
         height=24,
         zone_data=[
+            ["ceo" if (9 <= i <= 14 and 9 <= j <= 14) else "none" for i in range(24)]
+            for j in range(24)
+        ],
+        floor_data=[
             ["premium_carpet" if (8 <= i <= 15 and 8 <= j <= 15) else "none" for i in range(24)]
             for j in range(24)
         ],

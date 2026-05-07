@@ -47,6 +47,12 @@ export const MapService = {
     return res.data;
   },
 
+  /** 특정 좌표의 바닥재(Flooring) 타입 설정 */
+  async setFloorTile(x: number, y: number, floorType: string) {
+    const res = await axios.post(`${API_BASE}/map/floors/set?x=${x}&y=${y}&floor_type=${floorType}`);
+    return res.data;
+  },
+
   /** 영역(Rect) 단위로 존 추가 */
   async addZone(name: string, x1: number, y1: number, x2: number, y2: number, color: string) {
     const res = await axios.post(`${API_BASE}/map/zones/add`, { name, x1, y1, x2, y2, color });

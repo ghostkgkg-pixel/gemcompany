@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Hammer, RotateCw, FlipHorizontal, Eraser, Save, X, Trash2, Box, Lock, Star, Move, User, Layout, ChevronRight, Monitor, PenTool, Users, Briefcase, Coffee } from 'lucide-react';
 import { GameCanvas } from '../GameCanvas';
 import { MapService } from '../../services/MapService';
@@ -266,12 +266,12 @@ export const MapEditorOverlay = ({
               <h3 className="text-[10px] font-black text-[#00f2ff]/50 uppercase tracking-[0.2em] mb-3 italic underline decoration-[#00f2ff]/20">바닥 마감 (Flooring)</h3>
               <div className="grid grid-cols-2 gap-2 mb-4">
                  {[
-                   { id: 'zone_neon_border',    label: '네온 테두리', color: '#00f2ff' },
-                   { id: 'zone_grid_dot',       label: '그리드 플레이트', color: '#333' },
-                   { id: 'zone_premium_carpet', label: '퍼플 카펫', color: '#4b0082' },
-                   { id: 'zone_wood',           label: '퓨처 우드', color: '#5d4037' },
-                   { id: 'zone_metal',          label: '메탈 플레이트', color: '#78909c' },
-                   { id: 'zone_glass',          label: '데이터 스트림', color: '#00bcd4' },
+                   { id: 'floor_neon_border',    label: '네온 테두리', color: '#00f2ff' },
+                   { id: 'floor_grid_dot',       label: '그리드 플레이트', color: '#333' },
+                   { id: 'floor_premium_carpet', label: '퍼플 카펫', color: '#4b0082' },
+                   { id: 'floor_wood',           label: '퓨처 우드', color: '#5d4037' },
+                   { id: 'floor_metal',          label: '메탈 플레이트', color: '#78909c' },
+                   { id: 'floor_glass',          label: '데이터 스트림', color: '#00bcd4' },
                  ].map(f => (
                    <button
                      key={f.id}
@@ -283,8 +283,8 @@ export const MapEditorOverlay = ({
                    </button>
                  ))}
                  <button 
-                   onClick={() => trySetBrush('zone_none')}
-                   className={`p-2 border-2 border-dashed flex items-center gap-2 transition-all col-span-2 ${brush === 'zone_none' ? 'border-[#00f2ff] bg-[#00f2ff]/10' : 'border-white/5 bg-white/5 text-white/40 hover:border-white/20'}`}
+                   onClick={() => trySetBrush('floor_none')}
+                   className={`p-2 border-2 border-dashed flex items-center gap-2 transition-all col-span-2 ${brush === 'floor_none' ? 'border-[#00f2ff] bg-[#00f2ff]/10' : 'border-white/5 bg-white/5 text-white/40 hover:border-white/20'}`}
                  >
                     <div className="w-3 h-3 border border-white/20 rounded-full" />
                     <span className="text-[9px] font-bold italic">기본 바닥으로 초기화</span>

@@ -71,7 +71,7 @@ export class InteractionManager {
             this.handleObstaclePreview(selectedTool, cart, isoPos);
         } 
         // 영역 선택(타일, 지우개 등) 프리뷰 로직
-        else if (selectedTool.startsWith('zone_') || selectedTool === 'tile_eraser' || selectedTool === 'move_tool') {
+        else if (selectedTool.startsWith('zone_') || selectedTool.startsWith('floor_') || selectedTool === 'tile_eraser' || selectedTool === 'move_tool') {
             if (this.dragStart) {
                 this.hideSpecificPreviews();
                 this.drawSelection(this.dragStart, cart);
@@ -146,6 +146,20 @@ export class InteractionManager {
                     }
                 }
                 await MapService.syncMapData(newMap);
+            } else if (selectedTool.startsWith('floor_')) {
+                const tileType = selectedTool.replace('floor_', '');
+                const newMap = JSON.parse(JSON.stringify(currentMap));
+                if (!newMap.floor_data) {
+                    newMap.floor_data = Array.from({ length: newMap.height }, () => Array(newMap.width).fill('none'));
+                }
+                for (let j = y1; j <= y2; j++) {
+                    for (let i = x1; i <= x2; i++) {
+                        if (newMap.floor_data[j] && newMap.floor_data[j][i] !== undefined) {
+                            newMap.floor_data[j][i] = tileType;
+                        }
+                    }
+                }
+                await MapService.syncMapData(newMap);
             } else if (selectedTool.startsWith('obstacle_')) {
                 const { selectedRotation, selectedFlipX } = useGameStore.getState();
                 await MapService.placeObstacle(start.x, start.y, selectedTool, selectedRotation, selectedFlipX);
@@ -187,13 +201,14 @@ export class InteractionManager {
     private async handleTileEraser(x1: number, y1: number, x2: number, y2: number) {
         const m = useGameStore.getState().currentMap;
         const newMap = JSON.parse(JSON.stringify(m));
-        if (!newMap.zone_data) {
-            newMap.zone_data = Array.from({ length: newMap.height }, () => Array(newMap.width).fill('none'));
-        }
+        
+        if (!newMap.zone_data) newMap.zone_data = Array.from({ length: newMap.height }, () => Array(newMap.width).fill('none'));
+        if (!newMap.floor_data) newMap.floor_data = Array.from({ length: newMap.height }, () => Array(newMap.width).fill('none'));
 
         for (let j = y1; j <= y2; j++) {
             for (let i = x1; i <= x2; i++) {
-                newMap.zone_data[j][i] = 'void';
+                newMap.zone_data[j][i] = 'none';
+                newMap.floor_data[j][i] = 'void'; // 바닥 타일을 구멍(void)으로 만듦
                 // 장애물 제거 로직 포함 (타일 삭제 시 해당 위치 장애물도 정리)
                 newMap.obstacles = newMap.obstacles.filter((o: any) => !(Math.floor(o.x) === i && Math.floor(o.y) === j));
             }
