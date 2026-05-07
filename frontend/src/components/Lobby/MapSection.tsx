@@ -12,7 +12,7 @@ interface MapSectionProps {
   toggleBuildMode: () => void;
   enterOfficeArchitect: () => void;
   enterModuleLab: () => void;
-  scrollToStarters: () => void;
+  handleCreateNewCompany: () => void;
 }
 
 export const MapSection = ({ 
@@ -25,13 +25,14 @@ export const MapSection = ({
   toggleBuildMode,
   enterOfficeArchitect,
   enterModuleLab,
-  scrollToStarters
+  handleCreateNewCompany
 }: MapSectionProps) => {
   const { setShowUpgradeModal } = useGameStore();
 
   return (
     <CyberPanel title="01. 컴퍼니 관리" idTag="CORP-SYS" className="h-full">
       <div className="flex flex-col gap-4 h-full">
+        {/* 상단 액션 버튼 그룹 */}
         <div className="grid grid-cols-2 gap-2">
           <CyberButton 
             onClick={enterOfficeArchitect}
@@ -48,19 +49,25 @@ export const MapSection = ({
           </CyberButton>
         </div>
 
+        {/* 새 회사 설립 버튼 (바로 생성 로직 트리거) */}
         <CyberButton 
-          onClick={scrollToStarters}
-          className="w-full py-3 border-2 border-dashed border-[#00f2ff]/30 text-[#00f2ff]/60 flex flex-col items-center justify-center gap-1 bg-[#00f2ff]/5 rounded-lg hover:border-[#00f2ff] hover:text-[#00f2ff] hover:bg-[#00f2ff]/10 transition-all"
+          onClick={handleCreateNewCompany}
+          className="w-full py-4 border-2 border-dashed border-[#00f2ff]/30 text-[#00f2ff]/60 flex flex-col items-center justify-center gap-1 bg-[#00f2ff]/5 rounded-lg hover:border-[#00f2ff] hover:text-[#00f2ff] hover:bg-[#00f2ff]/10 transition-all"
         >
           <div className="flex items-center gap-2">
             <Plus size={18} />
-            <span className="text-xs font-bold uppercase tracking-widest">새 회사 설립</span>
+            <span className="text-xs font-black uppercase tracking-widest">새 회사 설립 (Startup)</span>
           </div>
-          <span className="text-[8px] opacity-60">아래 스타터 중 하나를 선택하여 창업하세요</span>
+          <span className="text-[8px] opacity-60 italic">새로운 오피스 평면도를 설계하고 경영을 시작하세요</span>
         </CyberButton>
         
+        {/* 기업 리스트 영역 */}
         <div className="flex-1 flex flex-col gap-3 overflow-y-auto pr-2 custom-scrollbar border-t-2 border-[#00f2ff]/10 pt-4">
-          <div className="text-[10px] font-black mb-1 text-[#00f2ff]/50 uppercase tracking-widest">내 기업 리스트</div>
+          <div className="text-[10px] font-black mb-1 text-[#00f2ff]/50 uppercase tracking-widest flex justify-between items-center">
+            <span>내 기업 리스트 (Portfolio)</span>
+            <span className="text-[8px] opacity-40 font-normal">TOTAL: {templates?.companies ? Object.keys(templates.companies).length : 0}</span>
+          </div>
+
           {!templates ? (
             <div className="flex flex-col gap-2">
               {[1, 2, 3].map(i => (
@@ -69,7 +76,7 @@ export const MapSection = ({
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {/* Render Companies */}
+              {/* 등록된 회사 목록 렌더링 */}
               {templates.companies && Object.values(templates.companies).map((c: any) => (
                 <div key={c.id} className="flex items-center gap-1 group">
                   <button 
@@ -84,27 +91,24 @@ export const MapSection = ({
                       <MapIcon size={16} className={currentMap?.id === c.id ? "text-[#00f2ff]" : "text-white/20"} />
                       <span className="truncate">{c.name}</span>
                     </div>
-                    <span className="text-[8px] opacity-40 italic">{c.width}x{c.height} HQ</span>
+                    <span className="text-[8px] opacity-40 italic uppercase">{c.width}x{c.height} HQ</span>
+                  </button>
+                  
+                  {/* 삭제 버튼 (호버 시 표시) */}
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleDeleteTemplate?.(c.id); }}
+                    className="opacity-0 group-hover:opacity-100 p-2 text-red-500/40 hover:text-red-500 transition-all"
+                  >
+                    <Trash2 size={14} />
                   </button>
                 </div>
               ))}
 
-              {/* Always show starters at the bottom for new company creation */}
-              <div id="starter-templates" className="mt-6 pt-6 border-t border-white/5">
-                <div className="text-[10px] font-black mb-3 text-[#00f2ff]/50 uppercase tracking-widest">기업용 스타터 템플릿</div>
-                <div className="grid grid-cols-1 gap-2">
-                  {templates.defaults && Object.entries(templates.defaults).map(([id, t]: [string, any]) => (
-                    <button 
-                      key={id}
-                      onClick={() => handleSelectTemplate(id)}
-                      className="text-left px-4 py-3 border-2 border-white/5 bg-white/5 font-bold text-xs text-white/40 hover:border-[#00f2ff]/30 hover:text-[#00f2ff] transition-all flex justify-between items-center group"
-                    >
-                      <span>{t.name}</span>
-                      <span className="text-[9px] opacity-0 group-hover:opacity-100 transition-all">설립하기 &gt;</span>
-                    </button>
-                  ))}
+              {(!templates.companies || Object.keys(templates.companies).length === 0) && (
+                <div className="py-10 text-center border-2 border-dashed border-white/5 rounded-lg">
+                   <p className="text-[10px] text-white/20 italic">설립된 회사가 없습니다.<br/>위의 버튼을 눌러 시작하세요.</p>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

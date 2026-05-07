@@ -4,30 +4,37 @@ import re
 import os
 
 class GeminiConnector:
+    """
+    Gemini CLI를 통해 LLM과 통신하는 커넥터 클래스
+    """
     def __init__(self, binary=None, default_model=None):
         if binary is None:
-            # Try to find gemini in common locations or use default
+            # 환경별 gemini 실행 파일 경로 설정
             self.binary = "gemini"
-            # Hardcoded absolute path for this specific environment as a fallback
+            # 윈도우 환경 등에서의 폴백(Fallback) 경로
             self.fallback_binary = r"C:\Users\Wilo_Gun\AppData\Roaming\npm\gemini.cmd"
         else:
             self.binary = binary
             self.fallback_binary = None
+        # 기본 모델 설정 (gemini-3.1-flash-lite-preview 등)
         self.default_model = default_model or os.getenv("GEMINI_FAST_MODEL", "gemini-3.1-flash-lite-preview")
 
     def _execute(self, args, input_data=None, model=None, cwd=None):
+        """
+        Gemini CLI 명령어를 실행하고 결과를 반환
+        """
         if "-m" not in args:
             args = ["-m", model or self.default_model] + args
 
         def run_with_binary(binary):
             workspace_dir = cwd
             if workspace_dir is None:
-                # Default to a dedicated empty workspace for lightweight tasks.
+                # 전용 워크스페이스 디렉토리 설정 (node_modules 스캔 방지 등)
                 workspace_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cli_workspace")
                 if not os.path.exists(workspace_dir):
                     os.makedirs(workspace_dir)
 
-            # Using Popen to allow future real-time streaming capabilities
+            # 서브프로세스를 통해 CLI 실행
             process = subprocess.Popen(
                 [binary] + args,
                 stdin=subprocess.PIPE,
@@ -61,7 +68,10 @@ class GeminiConnector:
             raise e
 
     def send_prompt(self, prompt: str, model=None, cwd=None) -> str:
-        # Encode input as UTF-8 bytes for stdin
+        """
+        단순 텍스트 프롬프트를 전송하고 노이즈가 제거된 응답 반환
+        """
+        # 입력을 UTF-8 바이트로 인코딩하여 전송
         stdout = self._execute(["-p", ""], input_data=prompt.encode('utf-8'), model=model, cwd=cwd)
         
         # Surgical removal of known CLI noise patterns
@@ -82,7 +92,10 @@ class GeminiConnector:
         return cleaned.strip()
 
     def send_prompt_json(self, prompt: str, model=None, cwd=None) -> dict:
-        # Encode input as UTF-8 bytes for stdin
+        """
+        LLM으로부터 JSON 형식의 응답을 받아 파싱하여 반환
+        """
+        # 입력을 UTF-8 바이트로 인코딩하여 전송
         stdout = self._execute(["-p", ""], input_data=prompt.encode('utf-8'), model=model, cwd=cwd)
         
         # 1. Try to find markdown JSON block first (most reliable)

@@ -2,11 +2,15 @@ import React from 'react';
 import { Play, Settings, Power, LayoutDashboard } from 'lucide-react';
 
 interface IntroPageProps {
-  onStartSimulation: () => void;
-  onOpenLobby: () => void;
+  onStartSimulation: () => void; // 바로 시뮬레이션 시작 핸들러
+  onOpenLobby: () => void;      // 로비(커맨드 센터) 이동 핸들러
 }
 
+/**
+ * 인트로(메인 타이틀) 페이지 컴포넌트
+ */
 export function IntroPage({ onStartSimulation, onOpenLobby }: IntroPageProps) {
+  // 프로그램 종료 핸들러
   const handleExit = () => {
     if (window.confirm("프로그램을 종료하시겠습니까?")) {
       window.close();
@@ -16,12 +20,12 @@ export function IntroPage({ onStartSimulation, onOpenLobby }: IntroPageProps) {
   return (
     <div className="w-full h-screen bg-[#0a0f1e] text-[#00f2ff] font-['NeoDunggeunmo'] relative overflow-hidden flex flex-col items-center justify-center scanline-effect">
       
-      {/* Background Ambience */}
+      {/* 배경 그리드 장식 */}
       <div className="absolute inset-0 opacity-20">
         <div className="absolute inset-0 bg-[radial-gradient(#00f2ff_1px,transparent_1px)] [background-size:20px_20px]" />
       </div>
 
-      {/* Main Title Area */}
+      {/* 메인 타이틀 영역 */}
       <div className="z-10 flex flex-col items-center mb-16 floating">
         <div className="relative group">
           <h1 className="text-8xl font-black tracking-tighter neon-text italic glitch-hover cursor-default select-none">
@@ -33,7 +37,7 @@ export function IntroPage({ onStartSimulation, onOpenLobby }: IntroPageProps) {
         </div>
       </div>
 
-      {/* Menu Options */}
+      {/* 메뉴 옵션 버튼 목록 */}
       <div className="z-10 flex flex-col gap-4 w-72 stagger-in">
         <button 
           onClick={onStartSimulation}
@@ -70,12 +74,12 @@ export function IntroPage({ onStartSimulation, onOpenLobby }: IntroPageProps) {
         </button>
       </div>
 
-      {/* Footer Info */}
+      {/* 하단 저작권 정보 */}
       <div className="absolute bottom-8 text-[10px] text-white/30 tracking-[0.5em] uppercase font-bold">
         Copyright 2026 Ghostkgkg-Pixel. All Rights Reserved.
       </div>
 
-      {/* Side Decorative Lines */}
+      {/* 측면 장식 라인 */}
       <div className="absolute top-0 left-12 w-px h-full bg-gradient-to-b from-transparent via-[#00f2ff]/20 to-transparent" />
       <div className="absolute top-0 right-12 w-px h-full bg-gradient-to-b from-transparent via-[#00f2ff]/20 to-transparent" />
     </div>

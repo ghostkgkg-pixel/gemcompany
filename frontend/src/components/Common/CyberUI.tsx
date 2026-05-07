@@ -4,16 +4,19 @@ interface CyberPanelProps {
   children: React.ReactNode;
   title?: string;
   className?: string;
-  idTag?: string;
+  idTag?: string; // 우측 상단에 표시될 태그 (예: SEC-01)
 }
 
+/**
+ * 사이버펑크 스타일의 메인 패널 컴포넌트
+ */
 export const CyberPanel = ({ children, title, className = "", idTag = "SEC-01" }: CyberPanelProps) => {
   return (
     <div className={`cyber-panel-v2 panel-scanline relative ${className}`}>
-      {/* Top ID Tag - Positioned relative to the real top edge */}
+      {/* 상단 ID 태그 장식 */}
       <div className="cyber-tab">{idTag}</div>
       
-      {/* Panel Content - Internal Padding is now safe */}
+      {/* 패널 내부 컨텐츠 */}
       <div className="relative z-10 h-full flex flex-col p-6 pt-8">
         {title && (
           <h2 className="text-2xl font-black border-b-2 border-[#00f2ff]/20 pb-3 mb-6 flex items-center gap-2 italic uppercase tracking-tighter text-white neon-text-intense">
@@ -25,7 +28,7 @@ export const CyberPanel = ({ children, title, className = "", idTag = "SEC-01" }
         </div>
       </div>
 
-      {/* Subtle Glow Overlay */}
+      {/* 미세한 글로우 효과 오버레이 */}
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#00f2ff]/5 to-transparent rounded-2xl" />
     </div>
   );
@@ -37,11 +40,14 @@ interface CyberButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
 
 interface CyberStatBarProps {
   label: string;
-  value: number; // 0 to 100
+  value: number; // 0 ~ 100 사이의 값
   color?: string;
   level?: number;
 }
 
+/**
+ * 에이전트 능력치나 진행 상태를 표시하는 스태특 바 컴포넌트
+ */
 export const CyberStatBar = ({ label, value, color = "#00f2ff", level }: CyberStatBarProps) => {
   return (
     <div className="flex flex-col gap-1 mb-3">
@@ -51,14 +57,15 @@ export const CyberStatBar = ({ label, value, color = "#00f2ff", level }: CyberSt
           {level ? `LV.${level}` : `${value}%`}
         </span>
       </div>
+      {/* 바 본체 */}
       <div className="h-3 bg-black/40 border border-white/10 rounded-sm p-[2px] relative overflow-hidden">
-        {/* Segmented Background */}
+        {/* 세그먼트 배경 (10칸 구분선) */}
         <div className="absolute inset-0 flex gap-[2px]">
           {Array.from({ length: 10 }).map((_, i) => (
             <div key={i} className="flex-1 bg-white/5" />
           ))}
         </div>
-        {/* Progress Fill */}
+        {/* 진행률 게이지 */}
         <div 
           className="h-full relative transition-all duration-500 rounded-sm"
           style={{ 
@@ -74,6 +81,9 @@ export const CyberStatBar = ({ label, value, color = "#00f2ff", level }: CyberSt
   );
 };
 
+/**
+ * 사이버펑크 스타일의 공용 버튼 컴포넌트
+ */
 export const CyberButton = ({ children, className = "", ...props }: CyberButtonProps) => {
   return (
     <button className={`cyber-button-v2 ${className} flex items-center justify-center gap-2`} {...props}>

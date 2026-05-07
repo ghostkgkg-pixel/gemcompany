@@ -6,7 +6,7 @@ import { CompanyService } from '../services/CompanyService';
 import { useGameStore } from '../store/useGameStore';
 import { Building, ArrowLeft } from 'lucide-react';
 
-// Sub-components
+// 서브 컴포넌트들
 import { MapSection } from './Lobby/MapSection';
 import { StaffSection } from './Lobby/StaffSection';
 import { ControlSection } from './Lobby/ControlSection';
@@ -15,31 +15,39 @@ import { HiringModal, ZoneModal, SaveMapModal } from './Lobby/LobbyModals';
 import { UpgradeModal } from './UpgradeModal';
 
 interface SetupPageProps {
-  onStart: () => void;
-  onBack: () => void;
+  onStart: () => void; // 시뮬레이션 시작 핸들러
+  onBack: () => void;  // 인트로 화면으로 돌아가기 핸들러
 }
 
+/**
+ * 시뮬레이션 설정 페이지 컴포넌트 (로비)
+ * 맵 선택, 에이전트 고용, 회사 관리 및 맵 에디터 기능을 제공함
+ */
 export function SetupPage({ onStart, onBack }: SetupPageProps) {
-  const [spawnDesc, setSpawnDesc] = useState('');
-  const [isSpawning, setIsSpawning] = useState(false);
-  const [templates, setTemplates] = useState<any>(null);
+  // 로컬 상태 관리
+  const [spawnDesc, setSpawnDesc] = useState('');     // 자율 생성 설명 텍스트
+  const [isSpawning, setIsSpawning] = useState(false); // 생성/고용 진행 중 여부
+  const [templates, setTemplates] = useState<any>(null); // 서버에서 받은 맵/회사 템플릿 데이터
 
-  const [isEditingMap, setIsEditingMap] = useState(false);
-  const [isHiringModalOpen, setIsHiringModalOpen] = useState(false);
+  const [isEditingMap, setIsEditingMap] = useState(false); // 맵 에디터 활성화 여부
+  const [isHiringModalOpen, setIsHiringModalOpen] = useState(false); // 고용 모달 오픈 여부
 
+  // 고용 양식 상태
   const [hiringForm, setHiringForm] = useState({
     name: '', job: '', persona: '', body: 'body_light',
     hair_style: 'hair_short', hair_color: '#4B2C20', outfit: 'agent_dev', gender: 'male'
   });
 
-  const [isSavingMap, setIsSavingMap] = useState(false);
-  const [mapName, setMapName] = useState('');
+  const [isSavingMap, setIsSavingMap] = useState(false); // 맵 저장 모달 오픈 여부
+  const [mapName, setMapName] = useState('');           // 저장할 맵 이름
 
+  // 구역(Zone) 생성 관련 상태
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
   const [newZoneRange, setNewZoneRange] = useState<{ x1: number, y1: number, x2: number, y2: number } | null>(null);
   const [newZoneName, setNewZoneName] = useState('');
   const [newZoneColor, setNewZoneColor] = useState('#3b82f6');
 
+  // 전역 상태(Store) 바인딩
   const currentMap = useGameStore((state: any) => state.currentMap);
   const agentsObj = useGameStore((state: any) => state.agents);
   const agents = Object.values(agentsObj || {});
@@ -49,23 +57,25 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
   const selectedTool = useGameStore((state: any) => state.selectedTool);
   const setShowUpgradeModal = useGameStore((state: any) => state.setShowUpgradeModal);
 
+  // 초기 로드: 템플릿 및 구독 플랜 정보 조회
   useEffect(() => {
     fetchTemplates();
     fetchPlan();
   }, []);
 
+  // 이벤트 리스너 및 브라우저 뒤로가기 제어
   useEffect(() => {
-    // Add event listener for zone selection
+    // 맵 에디터에서 구역 선택 시 발생하는 커스텀 이벤트 처리
     const handleZoneSelection = (e: any) => {
       setNewZoneRange(e.detail);
       setIsZoneModalOpen(true);
     };
     
-    // Handle Browser Back Button: If editor is open, close it instead of going back
+    // 브라우저 뒤로가기 버튼 처리: 에디터가 열려 있으면 에디터를 먼저 닫음
     const handlePopState = (e: any) => {
       if (isEditingMap) {
         setIsEditingMap(false);
-        // Push state again to prevent actually going back
+        // 상태를 다시 밀어넣어 실제로 뒤로가기가 발생하지 않게 함
         window.history.pushState(null, '', window.location.href);
       }
     };
@@ -73,7 +83,6 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     window.addEventListener('zone-selected', handleZoneSelection);
     window.addEventListener('popstate', handlePopState);
     
-    // Initialize pushState to allow capturing back button
     if (isEditingMap) {
       window.history.pushState(null, '', window.location.href);
     }
@@ -84,7 +93,7 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     };
   }, [isEditingMap]); 
 
-  // Dedicated cleanup on SetupPage unmount
+  // 컴포넌트 언마운트 시 클린업 (빌드 모드 해제 등)
   useEffect(() => {
     return () => {
       const { setMap, toggleBuildMode, buildMode } = useGameStore.getState();
@@ -94,15 +103,17 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     };
   }, []);
 
+  // 구독 플랜 조회
   const fetchPlan = async () => {
     try {
       const data = await AccountService.getPlan();
       useGameStore.getState().setSubscriptionPlan(data.plan);
     } catch (err) {
-      console.error("Failed to fetch plan:", err);
+      console.error("플랜 정보 조회 실패:", err);
     }
   };
 
+  // 템플릿 및 회사 목록 조회
   const fetchTemplates = async () => {
     try {
       const data = await MapService.getTemplates();
@@ -111,6 +122,7 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
       useGameStore.getState().setCompanies(comps);
       
       const { selectedCompanyId, setMap, setSelectedCompanyId } = useGameStore.getState();
+      // 선택된 회사가 없으면 첫 번째 회사를 자동으로 선택
       if (!selectedCompanyId && Object.keys(comps).length > 0) {
         const firstId = Object.keys(comps)[0];
         const firstComp = comps[firstId];
@@ -118,10 +130,11 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
         setSelectedCompanyId(firstId);
       }
     } catch (err) {
-      console.error("Failed to fetch templates:", err);
+      console.error("템플릿 조회 실패:", err);
     }
   };
 
+  // 에이전트 자율 생성 핸들러
   const handleSpawn = async () => {
     if (!spawnDesc.trim()) return;
     setIsSpawning(true);
@@ -129,12 +142,13 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
       await AgentService.spawnAgent(spawnDesc);
       setSpawnDesc('');
     } catch (err) {
-      console.error("Spawn failed:", err);
+      console.error("자율 생성 실패:", err);
     } finally {
       setIsSpawning(false);
     }
   };
 
+  // 에이전트 수동 고용 핸들러
   const handleHire = async () => {
     setIsSpawning(true);
     try {
@@ -145,15 +159,18 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
         hair_style: 'hair_short', hair_color: '#4B2C20', outfit: 'agent_dev', gender: 'male'
       });
     } catch (err) {
-      console.error("Hire failed:", err);
+      console.error("고용 실패:", err);
     } finally {
       setIsSpawning(false);
     }
   };
+
+  // 맵 템플릿 선택 핸들러
   const handleSelectTemplate = async (id: string) => {
     const { setMap, setSelectedCompanyId } = useGameStore.getState();
     try {
       if (templates.defaults && templates.defaults[id]) {
+        // 기본 템플릿으로 새 회사 생성
         const name = prompt("새 회사의 이름을 입력하세요:", templates.defaults[id].name);
         if (!name) return;
         const res = await CompanyService.createCompany(name, id);
@@ -161,36 +178,50 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
         setSelectedCompanyId(res.company.id);
         fetchTemplates();
       } else if (templates.companies && templates.companies[id]) {
+        // 기존에 저장된 회사/맵 선택
         const company = templates.companies[id];
         setMap(company);
         setSelectedCompanyId(company.id);
         await MapService.syncMapData(company);
       }
     } catch (err) {
-      console.error("Selection failed:", err);
+      console.error("템플릿 선택 실패:", err);
     }
   };
 
-  const scrollToStarters = () => {
-    const el = document.getElementById('starter-templates');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  // 새 회사 설립 핸들러 (기본 템플릿 사용)
+  const handleCreateNewCompany = async () => {
+    if (!templates.defaults || Object.keys(templates.defaults).length === 0) {
+      alert("사용 가능한 스타터 템플릿이 없습니다.");
+      return;
+    }
+    
+    // 첫 번째 기본 템플릿을 스타터로 사용
+    const firstStarterId = Object.keys(templates.defaults)[0];
+    await handleSelectTemplate(firstStarterId);
+    
+    // 생성이 성공적으로 되어 맵이 설정되었다면 바로 에디터 오픈
+    if (useGameStore.getState().currentMap) {
+      setIsEditingMap(true);
+    }
   };
 
+  // 저장된 맵 삭제 핸들러
   const handleDeleteTemplate = async (id: string) => {
     if (!window.confirm(`'${id}' 맵을 삭제하시겠습니까?`)) return;
     try {
       await MapService.deleteMap(id);
       await fetchTemplates();
     } catch (err) {
-      console.error("Failed to delete map:", err);
+      console.error("맵 삭제 실패:", err);
     }
   };
 
+  // '오피스 아키텍트' (회사 배치 수정) 모드 진입
   const enterOfficeArchitect = () => {
     const { selectedCompanyId, setMap } = useGameStore.getState();
     if (!selectedCompanyId) return;
     
-    // Restore the company map from templates if it exists
     if (templates?.companies && templates.companies[selectedCompanyId]) {
       setMap(templates.companies[selectedCompanyId]);
     }
@@ -199,6 +230,7 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     setTimeout(() => setIsEditingMap(true), 0);
   };
 
+  // '모듈 연구소' (독립 맵 생성) 모드 진입
   const enterModuleLab = () => {
     useGameStore.setState({ 
       editorMode: 'module', 
@@ -216,11 +248,13 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     setTimeout(() => setIsEditingMap(true), 0);
   };
 
+  // 맵 저장 처리 핸들러
   const handleSaveMap = async () => {
-    const { editorMode, currentMap, setSelectedCompanyId } = useGameStore.getState();
+    const { editorMode, currentMap } = useGameStore.getState();
     
     try {
       if (editorMode === 'company') {
+        // 회사 배치 상태 저장
         if (currentMap) {
           await MapService.syncMapData(currentMap);
           setIsEditingMap(false);
@@ -228,6 +262,7 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
           fetchTemplates();
         }
       } else {
+        // 독립 모듈로 저장
         if (!mapName.trim()) return;
         await MapService.saveMap(mapName);
         setIsSavingMap(false);
@@ -237,13 +272,14 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
       }
     } catch (err: any) {
       if (err.response?.status === 403) {
-        setShowUpgradeModal(true);
+        setShowUpgradeModal(true); // 플랜 업그레이드 유도
       } else {
-        console.error("Failed to save map:", err);
+        console.error("맵 저장 실패:", err);
       }
     }
   };
 
+  // 구역(Zone) 추가 핸들러
   const handleAddZone = async () => {
     if (!newZoneName.trim() || !newZoneRange) return;
     try {
@@ -254,28 +290,30 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
       const m = await MapService.getCurrentMap();
       useGameStore.getState().setMap(m);
     } catch (err) {
-      console.error("Failed to add zone:", err);
+      console.error("구역 추가 실패:", err);
     }
   };
 
+  // 구역(Zone) 제거 핸들러
   const handleRemoveZone = async (name: string) => {
     try {
       await MapService.removeZone(name);
       const m = await MapService.getCurrentMap();
       useGameStore.getState().setMap(m);
     } catch (err) {
-      console.error("Failed to remove zone:", err);
+      console.error("구역 제거 실패:", err);
     }
   };
 
   return (
     <div className="w-full h-screen bg-[#0a0f1e] flex flex-col font-['NeoDunggeunmo'] text-[#00f2ff] p-0 scanline-effect relative overflow-hidden">
 
-      {/* Background Ambience */}
+      {/* 배경 앰비언스 */}
       <div className="absolute inset-0 opacity-10 pointer-events-none z-0">
         <div className="absolute inset-0 bg-[radial-gradient(#00f2ff_1px,transparent_1px)] [background-size:20px_20px]" />
       </div>
 
+      {/* 헤더 HUD */}
       <header className="h-16 border-b-2 border-[#00f2ff]/30 bg-black/80 backdrop-blur-md px-8 flex items-center justify-between z-50 flex-none">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-4">
@@ -303,8 +341,10 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
         </div>
       </header>
 
+      {/* 메인 3단 대시보드 그리드 */}
       <main className="flex-1 min-h-0 flex flex-col items-center justify-center py-4 px-10 overflow-hidden">
         <div className="w-full h-[96%] max-w-[1800px] mx-auto grid grid-cols-1 lg:grid-cols-[1fr_1.8fr_1fr] gap-10 items-stretch">
+          {/* 1단: 맵 및 회사 관리 */}
           <MapSection
             templates={templates}
             currentMap={currentMap}
@@ -315,14 +355,16 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
             toggleBuildMode={toggleBuildMode}
             enterOfficeArchitect={enterOfficeArchitect}
             enterModuleLab={enterModuleLab}
-            scrollToStarters={scrollToStarters}
+            handleCreateNewCompany={handleCreateNewCompany}
           />
 
+          {/* 2단: 스태프 관리 (에이전트 목록) */}
           <StaffSection
             agents={agents}
             setIsHiringModalOpen={setIsHiringModalOpen}
           />
 
+          {/* 3단: 지휘 통제 (명령 및 시작) */}
           <ControlSection
             spawnDesc={spawnDesc}
             setSpawnDesc={setSpawnDesc}
@@ -335,7 +377,7 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
         </div>
       </main>
 
-      {/* Overlay & Modals */}
+      {/* 오버레이 및 모달 레이어 */}
       <MapEditorOverlay
         isOpen={isEditingMap} 
         onClose={() => {
@@ -355,9 +397,9 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
         handleSaveMap={() => {
           const { editorMode } = useGameStore.getState();
           if (editorMode === 'company') {
-            handleSaveMap(); // Syncs directly
+            handleSaveMap();
           } else {
-            setIsSavingMap(true); // Opens naming modal for module
+            setIsSavingMap(true);
           }
         }}
         setIsZoneModalOpen={setIsZoneModalOpen} 

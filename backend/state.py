@@ -4,19 +4,22 @@ import asyncio
 from typing import Dict, Optional
 from schemas import MapTemplate, Agent, MapZone, MapObstacle
 
+# 파일 경로 및 디렉토리 설정
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATE_FILE = os.path.join(BASE_DIR, "world_state.json")
-SKILLS_DIR = os.path.join(BASE_DIR, "skills")
-OUTPUT_DIR = os.path.join(BASE_DIR, "work_outputs")
+STATE_FILE = os.path.join(BASE_DIR, "world_state.json") # 전체 상태 저장 파일
+SKILLS_DIR = os.path.join(BASE_DIR, "skills")          # 에이전트 스킬 정의 디렉토리
+OUTPUT_DIR = os.path.join(BASE_DIR, "work_outputs")    # 에이전트 결과물 저장 디렉토리
 
+# 글로벌 상태 변수
 subscription_plan: str = "enterprise"
-agents: Dict[str, Agent] = {}
-current_map: Optional[MapTemplate] = None
-USER_SAVED_MODULES: Dict[str, MapTemplate] = {}
-USER_COMPANIES: Dict[str, MapTemplate] = {}
-interactive_queue: Optional[asyncio.PriorityQueue] = None
-background_queue: Optional[asyncio.PriorityQueue] = None
+agents: Dict[str, Agent] = {}                               # 현재 활성화된 에이전트 목록
+current_map: Optional[MapTemplate] = None                   # 현재 활성화된 맵
+USER_SAVED_MODULES: Dict[str, MapTemplate] = {}            # 사용자가 저장한 맵 모듈
+USER_COMPANIES: Dict[str, MapTemplate] = {}                # 사용자가 생성한 회사 목록
+interactive_queue: Optional[asyncio.PriorityQueue] = None  # 대화형 태스크 큐
+background_queue: Optional[asyncio.PriorityQueue] = None   # 백그라운드 태스크 큐
 
+# 기본 맵 템플릿 정의
 MAP_TEMPLATES = {
     "standard_office": MapTemplate(
         id="standard_office",
@@ -57,7 +60,10 @@ MAP_TEMPLATES = {
 }
 
 def save_state():
-    state = {
+    """
+    현재 메모리 상의 모든 상태(에이전트, 맵, 설정 등)를 JSON 파일로 저장
+    """
+    state_data = {
         "subscription_plan": subscription_plan,
         "agents": {id: a.model_dump() for id, a in agents.items()},
         "current_map": current_map.model_dump() if current_map else None,
@@ -65,37 +71,42 @@ def save_state():
         "companies": {k: v.model_dump() for k, v in USER_COMPANIES.items()},
     }
     with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
+        json.dump(state_data, f, ensure_ascii=False, indent=2)
 
 def load_state():
+    """
+    저장된 JSON 파일로부터 상태를 읽어와 글로벌 변수들에 복원
+    """
     global current_map, subscription_plan, agents, USER_SAVED_MODULES, USER_COMPANIES
     if not os.path.exists(STATE_FILE):
         return
     try:
         with open(STATE_FILE, "r", encoding="utf-8") as f:
-            state = json.load(f)
+            state_data = json.load(f)
         
-        subscription_plan = state.get("subscription_plan", "enterprise")
+        subscription_plan = state_data.get("subscription_plan", "enterprise")
         
-        agents_data = state.get("agents", {})
+        # 에이전트 데이터 복원
+        agents_data = state_data.get("agents", {})
         if isinstance(agents_data, dict):
             agents.clear()
             for k, v in agents_data.items():
                 agents[k] = Agent(**v)
         
-        current_map_data = state.get("current_map")
+        # 맵 및 모듈 데이터 복원
+        current_map_data = state_data.get("current_map")
         if current_map_data:
             current_map = MapTemplate(**current_map_data)
             
-        saved_modules_data = state.get("saved_modules", {})
+        saved_modules_data = state_data.get("saved_modules", {})
         USER_SAVED_MODULES.clear()
         for k, v in saved_modules_data.items():
             USER_SAVED_MODULES[k] = MapTemplate(**v)
             
-        companies_data = state.get("companies", {})
+        companies_data = state_data.get("companies", {})
         USER_COMPANIES.clear()
         for k, v in companies_data.items():
             USER_COMPANIES[k] = MapTemplate(**v)
             
     except Exception as e:
-        print(f"Error loading state: {e}")
+        print(f"상태 로드 중 오류 발생: {e}")
