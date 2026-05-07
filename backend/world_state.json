@@ -18,24 +18,7 @@
         "icon": "room"
       }
     ],
-    "obstacles": [
-      {
-        "x": 7,
-        "y": 10,
-        "type": "obstacle_desk",
-        "rotation": 0,
-        "flip_x": false,
-        "owner_id": null
-      },
-      {
-        "x": 6,
-        "y": 15,
-        "type": "obstacle_desk",
-        "rotation": 0,
-        "flip_x": false,
-        "owner_id": null
-      }
-    ],
+    "obstacles": [],
     "zone_data": [
       [
         "neon_border",

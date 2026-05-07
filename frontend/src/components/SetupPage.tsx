@@ -222,14 +222,14 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     try {
       if (editorMode === 'company') {
         if (currentMap) {
-          await axios.post('http://localhost:8000/map/sync', currentMap);
+          await MapService.syncMapData(currentMap);
           setIsEditingMap(false);
           alert("오피스 배치가 저장되었습니다!");
           fetchTemplates();
         }
       } else {
         if (!mapName.trim()) return;
-        await saveMap(mapName);
+        await MapService.saveMap(mapName);
         setIsSavingMap(false);
         setMapName('');
         alert("새 모듈이 저장되었습니다!");
@@ -248,12 +248,12 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     if (!newZoneName.trim() || !newZoneRange) return;
     try {
       const { x1, y1, x2, y2 } = newZoneRange;
-      await axios.post('http://localhost:8000/map/zones/add', {
+      await MapService.addZone({
         name: newZoneName, x1, y1, x2, y2, color: newZoneColor
       });
       setIsZoneModalOpen(false);
       setNewZoneName('');
-      const m = await getMapCurrent();
+      const m = await MapService.getCurrentMap();
       useGameStore.getState().setMap(m);
     } catch (err) {
       console.error("Failed to add zone:", err);
@@ -262,8 +262,8 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
 
   const handleRemoveZone = async (name: string) => {
     try {
-      await axios.post('http://localhost:8000/map/zones/remove', { name });
-      const m = await getMapCurrent();
+      await MapService.removeZone(name);
+      const m = await MapService.getCurrentMap();
       useGameStore.getState().setMap(m);
     } catch (err) {
       console.error("Failed to remove zone:", err);
