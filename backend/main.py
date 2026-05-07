@@ -214,8 +214,17 @@ async def save_map_endpoint(name: str):
 @app.post("/map/merge")
 async def merge_map_endpoint(source_name: str, target_x: int, target_y: int):
     if not state.current_map: raise HTTPException(400, "No map selected")
+    
+    # Try to find by key or name in both saved modules and templates
     source = state.USER_SAVED_MODULES.get(source_name)
-    if not source: raise HTTPException(404, "Module not found")
+    if not source:
+        source = state.MAP_TEMPLATES.get(source_name)
+    if not source:
+        # Fallback: search by 'name' attribute
+        all_sources = list(state.USER_SAVED_MODULES.values()) + list(state.MAP_TEMPLATES.values())
+        source = next((m for m in all_sources if m.name == source_name), None)
+        
+    if not source: raise HTTPException(404, f"Module '{source_name}' not found")
     for obs in source.obstacles:
         nx, ny = target_x + obs.x, target_y + obs.y
         state.current_map.obstacles = [o for o in state.current_map.obstacles if not (o.x == nx and o.y == ny)]
@@ -296,6 +305,9 @@ async def connect(sid, environ, auth=None):
     m_data = state.current_map or state.MAP_TEMPLATES["standard_office"]
     await sio.emit("map_update", m_data.model_dump(), to=sid)
     await sio.emit("agents_update", [a.model_dump() for a in state.agents.values()], to=sid)
+
+# Combine FastAPI and Socket.io
+app = socketio.ASGIApp(sio, app)
 
 if __name__ == "__main__":
     import uvicorn
