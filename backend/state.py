@@ -6,6 +6,8 @@ from schemas import MapTemplate, Agent, MapZone, MapObstacle
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_FILE = os.path.join(BASE_DIR, "world_state.json")
+SKILLS_DIR = os.path.join(BASE_DIR, "skills")
+OUTPUT_DIR = os.path.join(BASE_DIR, "work_outputs")
 
 subscription_plan: str = "enterprise"
 agents: Dict[str, Agent] = {}

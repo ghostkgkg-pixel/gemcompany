@@ -41,6 +41,8 @@ graph_engine = KnowledgeGraphEngine(graph_db_path)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    state.interactive_queue = asyncio.PriorityQueue()
+    state.background_queue = asyncio.PriorityQueue()
     state.load_state()
     sync_all_agents()
     

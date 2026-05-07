@@ -1,5 +1,16 @@
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
+from dataclasses import dataclass, field
+import asyncio
+
+@dataclass(order=True)
+class Task:
+    priority: int
+    agent_id: str
+    prompt: str
+    model: str
+    task_id: Optional[str] = None
+    future: Optional[asyncio.Future] = field(default=None, compare=False)
 
 class MapZone(BaseModel):
     name: str
