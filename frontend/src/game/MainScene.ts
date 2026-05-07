@@ -118,18 +118,18 @@ export class MainScene extends Phaser.Scene {
     this.cameras.main.setZoom(0.6);
 
     this.input.on('wheel', (pointer: Phaser.Input.Pointer, over: any, deltaX: number, deltaY: number) => {
-      const zoomSensitivity = 0.002;
+      if (deltaY === 0) return;
+      
+      const zoomSensitivity = 0.003;
       const oldZoom = this.cameras.main.zoom;
-      const newZoom = Phaser.Math.Clamp(oldZoom - deltaY * zoomSensitivity, 0.3, 3.0);
+      const newZoom = Phaser.Math.Clamp(oldZoom - deltaY * zoomSensitivity, 0.2, 5.0);
       
       if (newZoom !== oldZoom) {
-        // Zoom towards pointer
         const mouseWorldX = pointer.worldX;
         const mouseWorldY = pointer.worldY;
         
         this.cameras.main.setZoom(newZoom);
         
-        // Adjust camera position to keep pointer over the same world coordinates
         const newMouseWorldX = pointer.worldX;
         const newMouseWorldY = pointer.worldY;
         

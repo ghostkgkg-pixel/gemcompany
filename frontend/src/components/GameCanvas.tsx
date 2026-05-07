@@ -7,38 +7,35 @@ export const GameCanvas = () => {
   const gameRef = useRef<Phaser.Game | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!containerRef.current || gameRef.current) return;
+    if (!containerRef.current || gameRef.current) return;
 
-      const config: Phaser.Types.Core.GameConfig = {
-        type: Phaser.CANVAS,
-        pixelArt: true,
-        antialias: false,
-        roundPixels: true,
-        scale: {
-          mode: Phaser.Scale.RESIZE,
-          parent: containerRef.current,
-          width: '100%',
-          height: '100%',
-          autoCenter: Phaser.Scale.CENTER_BOTH
-        },
-        backgroundColor: '#05080f',
-        scene: [MainScene],
-        physics: {
-          default: 'arcade',
-          arcade: { gravity: { x: 0, y: 0 }, debug: false }
-        },
-      };
+    const config: Phaser.Types.Core.GameConfig = {
+      type: Phaser.CANVAS,
+      pixelArt: true,
+      antialias: false,
+      roundPixels: true,
+      scale: {
+        mode: Phaser.Scale.RESIZE,
+        parent: containerRef.current,
+        width: '100%',
+        height: '100%',
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      },
+      backgroundColor: '#05080f',
+      scene: [MainScene],
+      physics: {
+        default: 'arcade',
+        arcade: { gravity: { x: 0, y: 0 }, debug: false }
+      },
+    };
 
-      try {
-        gameRef.current = new Phaser.Game(config);
-      } catch (err) {
-        console.error("Phaser initialization failed:", err);
-      }
-    }, 100);
+    try {
+      gameRef.current = new Phaser.Game(config);
+    } catch (err) {
+      console.error("Phaser initialization failed:", err);
+    }
 
     return () => {
-      clearTimeout(timer);
       if (gameRef.current) {
         gameRef.current.destroy(true);
         gameRef.current = null;
