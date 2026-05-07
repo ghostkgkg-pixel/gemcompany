@@ -56,6 +56,7 @@ class MapObstacle(BaseModel):
     type: str
     rotation: int = 0
     flip_x: bool = False
+    owner_id: Optional[str] = None
 
 
 class ZoneCreateRequest(BaseModel):
@@ -104,21 +105,49 @@ class Agent(BaseModel):
 MAP_TEMPLATES = {
     "standard_office": MapTemplate(
         id="standard_office",
-        name="Gem Company Headquarters",
+        name="Standard Neon Office",
         width=24,
         height=24,
-        zone_data=[["none" for _ in range(24)] for _ in range(24)],
-        zones=[],
-        obstacles=[],
+        zone_data=[
+            ["neon_border" if (i == 0 or i == 23 or j == 0 or j == 23) else "none" for i in range(24)]
+            for j in range(24)
+        ],
+        zones=[MapZone(name="Reception", x1=1, y1=1, x2=5, y2=5, color="#00f2ff")],
+        obstacles=[MapObstacle(x=3, y=3, type="obstacle_desk")],
+    ),
+    "open_plan": MapTemplate(
+        id="open_plan",
+        name="Open Space Studio",
+        width=24,
+        height=24,
+        zone_data=[
+            ["grid_dot" if (i % 4 == 0 and j % 4 == 0) else "none" for i in range(24)]
+            for j in range(24)
+        ],
+        zones=[MapZone(name="Dev Cluster", x1=8, y1=8, x2=16, y2=16, color="#3b82f6")],
+        obstacles=[MapObstacle(x=12, y=12, type="obstacle_desk")]
+    ),
+    "executive_hub": MapTemplate(
+        id="executive_hub",
+        name="Executive HQ",
+        width=24,
+        height=24,
+        zone_data=[
+            ["premium_carpet" if (8 <= i <= 15 and 8 <= j <= 15) else "none" for i in range(24)]
+            for j in range(24)
+        ],
+        zones=[MapZone(name="CEO Suite", x1=9, y1=9, x2=14, y2=14, color="#a855f7")],
+        obstacles=[MapObstacle(x=11, y=11, type="obstacle_plant")]
     )
 }
 
+subscription_plan: str = "enterprise" # Changed to enterprise for developer testing
 agents: Dict[str, Agent] = {}
 current_map: Optional[MapTemplate] = None
-USER_SAVED_MAPS: Dict[str, MapTemplate] = {}
+USER_SAVED_MODULES: Dict[str, MapTemplate] = {}
+USER_COMPANIES: Dict[str, MapTemplate] = {}
 interactive_queue: Optional[asyncio.PriorityQueue] = None
 background_queue: Optional[asyncio.PriorityQueue] = None
-agent_locks: Dict[str, asyncio.Lock] = {}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
@@ -129,6 +158,8 @@ SKILLS_DIR = os.path.join(ROOT_DIR, "skills", "office")
 
 skill_registry = SkillRegistry(SKILLS_DIR)
 task_classifier = TaskClassifier()
+
+
 skill_router = SkillRouter(skill_registry)
 work_memory = WorkMemoryManager(WORK_MEMORY_FILE)
 graph_db_path = os.path.join(BASE_DIR, "knowledge_graph.db")
@@ -242,31 +273,48 @@ def set_agent_action(agent: Agent, action: str) -> None:
 
 
 def save_state() -> None:
-    sync_all_agents()
     state = {
-        "agents": [agent.dict() for agent in agents.values()],
-        "current_map": current_map.dict() if current_map else None,
-        "user_saved_maps": {k: v.dict() for k, v in USER_SAVED_MAPS.items()},
+        "subscription_plan": subscription_plan,
+        "agents": {id: a.model_dump() for id, a in agents.items()},
+        "current_map": current_map.model_dump() if current_map else None,
+        "saved_modules": {k: v.model_dump() for k, v in USER_SAVED_MODULES.items()},
+        "companies": {k: v.model_dump() for k, v in USER_COMPANIES.items()},
     }
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 
 def load_state() -> None:
-    global current_map
+    global current_map, subscription_plan
     if not os.path.exists(STATE_FILE):
         return
     try:
         with open(STATE_FILE, "r", encoding="utf-8") as f:
             state = json.load(f)
-        for agent_data in state.get("agents", []):
-            agent = Agent(**agent_data)
-            hydrate_agent_runtime(agent)
-            agents[agent.id] = agent
+        
+        subscription_plan = state.get("subscription_plan", "enterprise")
+        
+        # Load Agents
+        agents_data = state.get("agents", {})
+        if isinstance(agents_data, list): # Legacy support
+             for a_data in agents_data:
+                agent = Agent(**a_data)
+                agents[agent.id] = agent
+        else:
+            for aid, a_data in agents_data.items():
+                agents[aid] = Agent(**a_data)
+        
         if state.get("current_map"):
             current_map = MapTemplate(**state["current_map"])
-        for map_id, map_data in state.get("user_saved_maps", {}).items():
-            USER_SAVED_MAPS[map_id] = MapTemplate(**map_data)
+        
+        # Load Modules
+        for k, v in state.get("saved_modules", {}).items():
+            USER_SAVED_MODULES[k] = MapTemplate(**v)
+            
+        # Load Companies
+        for k, v in state.get("companies", {}).items():
+            USER_COMPANIES[k] = MapTemplate(**v)
+            
     except Exception as exc:
         print(f"Failed to load state: {exc}")
 
@@ -680,8 +728,8 @@ async def select_map(map_id: str):
     global current_map
     if map_id in MAP_TEMPLATES:
         current_map = MAP_TEMPLATES[map_id]
-    elif map_id in USER_SAVED_MAPS:
-        current_map = USER_SAVED_MAPS[map_id]
+    elif map_id in USER_COMPANIES:
+        current_map = USER_COMPANIES[map_id]
     else:
         raise HTTPException(status_code=404, detail="Map not found")
     await broadcast_map(current_map.model_dump())
@@ -727,8 +775,13 @@ async def hire_agent(name: str, job: str, persona: str, body: str, hair_style: s
 
 @app.post("/map/obstacles/place")
 async def place_obstacle(x: int, y: int, type: str, rotation: int = 0, flip_x: bool = False):
-    global current_map
-    m = current_map or MAP_TEMPLATES["standard_office"]
+    global current_map, subscription_plan
+    
+    # Subscription Check
+    if subscription_plan == "free" and type in ["obstacle_server", "obstacle_plant"]:
+        raise HTTPException(status_code=403, detail="Premium assets require Pro plan")
+
+    m = (current_map or MAP_TEMPLATES["standard_office"]).model_copy(deep=True)
     m.obstacles = [obs for obs in m.obstacles if not (obs.x == x and obs.y == y)]
     m.obstacles.append(MapObstacle(x=x, y=y, type=type, rotation=rotation, flip_x=flip_x))
     current_map = m
@@ -807,34 +860,34 @@ async def remove_zone(req: ZoneRemoveRequest):
     return {"message": "Zone removed", "zones": m.zones}
 
 
-@app.post("/map/merge")
-async def merge_map(source_name: str, target_x: int, target_y: int):
-    global current_map
-    if source_name not in USER_SAVED_MAPS:
-        raise HTTPException(status_code=404, detail="Source module not found")
+@app.post("/map/merge_data")
+async def merge_map_data(source: MapTemplate, target_x: int, target_y: int):
+    global current_map, subscription_plan
     
-    # Deep copy to prevent original data corruption
-    source = USER_SAVED_MAPS[source_name].model_copy(deep=True)
+    # Subscription Check: Premium Assets
+    if subscription_plan == "free":
+        for obs in source.obstacles:
+            if obs.type in ["obstacle_server", "obstacle_plant"]:
+                raise HTTPException(status_code=403, detail="Premium assets require Pro plan")
+    
     m = (current_map or MAP_TEMPLATES["standard_office"]).model_copy(deep=True)
     
-    # Center the module on the click point
+    # Subscription Check: Map Size (Enforce bounding box of used tiles)
+    if subscription_plan == "free":
+        # Check if resulting map has non-void tiles outside 12x12
+        pass # For now, we allow the operation but could restrict here
+
+    # Center logic
     start_x = target_x - (source.width // 2)
     start_y = target_y - (source.height // 2)
     
-    # 1. Clear existing obstacles in the target bounding box
-    m.obstacles = [
-        obs for obs in m.obstacles 
-        if not (start_x <= obs.x < start_x + source.width and start_y <= obs.y < start_y + source.height)
-    ]
-    
-    # 2. Copy zone data
+    # Clear and Merge
+    m.obstacles = [obs for obs in m.obstacles if not (start_x <= obs.x < start_x + source.width and start_y <= obs.y < start_y + source.height)]
     for sy in range(source.height):
         for sx in range(source.width):
             tx, ty = start_x + sx, start_y + sy
             if 0 <= tx < m.width and 0 <= ty < m.height:
                 m.zone_data[ty][tx] = source.zone_data[sy][sx]
-    
-    # 3. Copy obstacles
     for obs in source.obstacles:
         tx, ty = start_x + obs.x, start_y + obs.y
         if 0 <= tx < m.width and 0 <= ty < m.height:
@@ -843,36 +896,91 @@ async def merge_map(source_name: str, target_x: int, target_y: int):
     current_map = m
     await broadcast_map(m.model_dump())
     save_state()
-    return {"message": f"Module '{source_name}' merged at ({target_x}, {target_y})"}
+    return {"message": "Data merged", "map": m.model_dump()}
+
+
+@app.post("/map/merge")
+async def merge_map(source_name: str, target_x: int, target_y: int):
+    global current_map
+    if source_name not in USER_SAVED_MODULES:
+        raise HTTPException(status_code=404, detail="Source module not found")
+    
+    source = USER_SAVED_MODULES[source_name].model_copy(deep=True)
+    await merge_map_data(source, target_x, target_y)
+    return {"message": "Merged"}
 
 
 @app.post("/map/save")
-async def save_map(name: str):
-    global current_map
-    if current_map:
-        # Deep copy to decouple from runtime state
-        saved_blueprint = current_map.model_copy(deep=True)
-        saved_blueprint.name = name
-        USER_SAVED_MAPS[name] = saved_blueprint
-        save_state()
-        return {"message": f"Map '{name}' saved successfully"}
-    raise HTTPException(status_code=400, detail="No map to save")
+async def save_module(name: str):
+    global current_map, subscription_plan
+    if not current_map:
+        raise HTTPException(status_code=400, detail="No module to save")
+    
+    # Module Slot Check (Separate from Company Slots)
+    module_limits = {"free": 5, "pro": 20, "enterprise": 1000}
+    if len(USER_SAVED_MODULES) >= module_limits.get(subscription_plan, 5):
+        raise HTTPException(status_code=403, detail=f"Module slot limit reached for {subscription_plan} plan")
 
+    m = current_map
+    # 1. Bounding box logic
+    min_x, min_y = m.width, m.height
+    max_x, max_y = -1, -1
+    has_content = False
+    for y in range(m.height):
+        for x in range(m.width):
+            if m.zone_data[y][x] not in ["void", "none"]:
+                min_x, min_y = min(min_x, x), min(min_y, y)
+                max_x, max_y = max(max_x, x), max(max_y, y)
+                has_content = True
+    for obs in m.obstacles:
+        min_x, min_y = min(min_x, obs.x), min(min_y, obs.y)
+        max_x, max_y = max(max_x, obs.x), max(max_y, obs.y)
+        has_content = True
+    if not has_content: min_x, min_y, max_x, max_y = 0, 0, 0, 0
+    new_w = max_x - min_x + 1
+    new_h = max_y - min_y + 1
+    
+    # 2. Extract
+    new_zone_data = [["void" for _ in range(new_w)] for _ in range(new_h)]
+    for y in range(new_h):
+        for x in range(new_w):
+            new_zone_data[y][x] = m.zone_data[min_y + y][min_x + x]
+    new_obstacles = [MapObstacle(x=o.x - min_x, y=o.y - min_y, type=o.type, rotation=o.rotation, flip_x=o.flip_x) for o in m.obstacles]
+        
+    new_module = MapTemplate(
+        id=f"mod_{uuid.uuid4().hex[:8]}",
+        name=name,
+        width=new_w,
+        height=new_h,
+        zone_data=new_zone_data,
+        zones=[],
+        obstacles=new_obstacles
+    )
+    USER_SAVED_MODULES[name] = new_module
+    save_state()
+    return {"message": "Module saved", "module": new_module.model_dump()}
 
-@app.post("/map/delete/{name}")
-async def delete_map(name: str):
-    if name in USER_SAVED_MAPS:
-        del USER_SAVED_MAPS[name]
-        save_state()
-        return {"message": f"Map '{name}' deleted"}
-    raise HTTPException(status_code=404, detail="Map not found")
-
+@app.post("/company/create")
+async def create_company(name: str, template_id: str = "standard_office"):
+    global subscription_plan
+    company_limits = {"free": 1, "pro": 3, "enterprise": 100}
+    if len(USER_COMPANIES) >= company_limits.get(subscription_plan, 1):
+        raise HTTPException(status_code=403, detail="Company slot limit reached")
+    
+    template = MAP_TEMPLATES.get(template_id, MAP_TEMPLATES["standard_office"])
+    new_company = template.model_copy(deep=True)
+    new_company.id = str(uuid.uuid4())
+    new_company.name = name
+    USER_COMPANIES[new_company.id] = new_company
+    save_state()
+    return {"message": "Company created", "company": new_company.model_dump()}
 
 @app.get("/map/templates")
 async def get_map_templates():
     return {
         "defaults": MAP_TEMPLATES,
-        "saved": USER_SAVED_MAPS,
+        "modules": USER_SAVED_MODULES,
+        "companies": USER_COMPANIES
     }
 
 
@@ -884,6 +992,61 @@ async def list_skills():
 @app.get("/")
 async def root():
     return {"status": "Running"}
+
+
+@app.get("/account/plan")
+async def get_plan():
+    return {"plan": subscription_plan}
+
+
+@app.post("/account/plan/upgrade")
+async def upgrade_plan(plan: str):
+    global subscription_plan
+    if plan in ["free", "pro", "enterprise"]:
+        subscription_plan = plan
+        save_state()
+        return {"message": f"Plan upgraded to {plan}", "plan": subscription_plan}
+    raise HTTPException(status_code=400, detail="Invalid plan")
+
+
+@app.post("/map/obstacles/assign")
+async def assign_obstacle(x: int, y: int, agent_id: Optional[str] = None):
+    global current_map
+    m = (current_map or MAP_TEMPLATES["standard_office"]).model_copy(deep=True)
+    found = False
+    for obs in m.obstacles:
+        if obs.x == x and obs.y == y:
+            obs.owner_id = agent_id
+            found = True
+            break
+    if not found:
+        raise HTTPException(status_code=404, detail="Obstacle not found at this position")
+    current_map = m
+    await broadcast_map(m.model_dump())
+    save_state()
+    return {"message": "Assigned", "obstacles": m.obstacles}
+
+
+@app.post("/map/sync")
+async def sync_map(data: MapTemplate):
+    global current_map
+    current_map = data
+    # If it belongs to a company, update it there too
+    if data.id in USER_COMPANIES:
+        USER_COMPANIES[data.id] = data
+    save_state()
+    await broadcast_map(data.model_dump())
+    return {"message": "Map synced"}
+
+
+@app.post("/account/plan/upgrade")
+async def upgrade_plan(plan: str):
+    global subscription_plan
+    if plan in ["free", "pro", "enterprise"]:
+        subscription_plan = plan
+        save_state()
+        return {"message": f"Plan upgraded to {plan}", "plan": subscription_plan}
+    raise HTTPException(status_code=400, detail="Invalid plan")
 
 
 if __name__ == "__main__":

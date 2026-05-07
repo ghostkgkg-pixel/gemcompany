@@ -10,6 +10,7 @@ import { StaffSection } from './Lobby/StaffSection';
 import { ControlSection } from './Lobby/ControlSection';
 import { MapEditorOverlay } from './Lobby/MapEditorOverlay';
 import { HiringModal, ZoneModal, SaveMapModal } from './Lobby/LobbyModals';
+import { UpgradeModal } from './UpgradeModal';
 
 interface SetupPageProps {
   onStart: () => void;
@@ -44,22 +45,76 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
   const toggleBuildMode = useGameStore((state: any) => state.toggleBuildMode);
   const setSelectedTool = useGameStore((state: any) => state.setSelectedTool);
   const selectedTool = useGameStore((state: any) => state.selectedTool);
+  const setShowUpgradeModal = useGameStore((state: any) => state.setShowUpgradeModal);
 
   useEffect(() => {
     fetchTemplates();
-    // Add event listener for zone selection from GameCanvas/MainScene
+    fetchPlan();
+  }, []);
+
+  useEffect(() => {
+    // Add event listener for zone selection
     const handleZoneSelection = (e: any) => {
       setNewZoneRange(e.detail);
       setIsZoneModalOpen(true);
     };
+    
+    // Handle Browser Back Button: If editor is open, close it instead of going back
+    const handlePopState = (e: any) => {
+      if (isEditingMap) {
+        setIsEditingMap(false);
+        // Push state again to prevent actually going back
+        window.history.pushState(null, '', window.location.href);
+      }
+    };
+
     window.addEventListener('zone-selected', handleZoneSelection);
-    return () => window.removeEventListener('zone-selected', handleZoneSelection);
+    window.addEventListener('popstate', handlePopState);
+    
+    // Initialize pushState to allow capturing back button
+    if (isEditingMap) {
+      window.history.pushState(null, '', window.location.href);
+    }
+
+    return () => {
+      window.removeEventListener('zone-selected', handleZoneSelection);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isEditingMap]); 
+
+  // Dedicated cleanup on SetupPage unmount
+  useEffect(() => {
+    return () => {
+      const { setMap, toggleBuildMode, buildMode } = useGameStore.getState();
+      setMap(null);
+      if (buildMode) toggleBuildMode();
+      useGameStore.setState({ editorMode: 'company', selectedCompanyId: null });
+    };
   }, []);
+
+  const fetchPlan = async () => {
+    try {
+      const res = await axios.get('http://localhost:8000/account/plan');
+      useGameStore.getState().setSubscriptionPlan(res.data.plan);
+    } catch (err) {
+      console.error("Failed to fetch plan:", err);
+    }
+  };
 
   const fetchTemplates = async () => {
     try {
       const response = await axios.get('http://localhost:8000/map/templates');
       setTemplates(response.data);
+      const comps = response.data.companies || {};
+      useGameStore.getState().setCompanies(comps);
+      
+      const { selectedCompanyId, setMap, setSelectedCompanyId } = useGameStore.getState();
+      if (!selectedCompanyId && Object.keys(comps).length > 0) {
+        const firstId = Object.keys(comps)[0];
+        const firstComp = comps[firstId];
+        setMap(firstComp);
+        setSelectedCompanyId(firstId);
+      }
     } catch (err) {
       console.error("Failed to fetch templates:", err);
     }
@@ -95,13 +150,29 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
   };
 
   const handleSelectTemplate = async (id: string) => {
+    const { setMap, setSelectedCompanyId } = useGameStore.getState();
     try {
-      const response = await axios.post(`http://localhost:8000/map/select/${id}`);
-      // Backend returns the map directly
-      useGameStore.getState().setMap(response.data);
-    } catch (error) {
-      console.error("Failed to change map:", error);
+      if (templates.defaults && templates.defaults[id]) {
+        const name = prompt("새 회사의 이름을 입력하세요:", templates.defaults[id].name);
+        if (!name) return;
+        const res = await axios.post(`http://localhost:8000/company/create?name=${name}&template_id=${id}`);
+        setMap(res.data.company);
+        setSelectedCompanyId(res.data.company.id);
+        fetchTemplates();
+      } else if (templates.companies && templates.companies[id]) {
+        const company = templates.companies[id];
+        setMap(company);
+        setSelectedCompanyId(company.id);
+        await axios.post('http://localhost:8000/map/sync', company);
+      }
+    } catch (err) {
+      console.error("Selection failed:", err);
     }
+  };
+
+  const scrollToStarters = () => {
+    const el = document.getElementById('starter-templates');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleDeleteTemplate = async (id: string) => {
@@ -114,15 +185,61 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
     }
   };
 
+  const enterOfficeArchitect = () => {
+    const { selectedCompanyId, setMap } = useGameStore.getState();
+    if (!selectedCompanyId) return;
+    
+    // Restore the company map from templates if it exists
+    if (templates?.companies && templates.companies[selectedCompanyId]) {
+      setMap(templates.companies[selectedCompanyId]);
+    }
+    
+    useGameStore.setState({ editorMode: 'company', buildMode: true });
+    setTimeout(() => setIsEditingMap(true), 0);
+  };
+
+  const enterModuleLab = () => {
+    useGameStore.setState({ 
+      editorMode: 'module', 
+      buildMode: true,
+      currentMap: {
+        id: 'new_module',
+        name: 'New Module',
+        width: 12,
+        height: 12,
+        zone_data: Array.from({ length: 12 }, () => Array(12).fill('void')),
+        zones: [],
+        obstacles: []
+      }
+    });
+    setTimeout(() => setIsEditingMap(true), 0);
+  };
+
   const handleSaveMap = async () => {
-    if (!mapName.trim()) return;
+    const { editorMode, currentMap, setSelectedCompanyId } = useGameStore.getState();
+    
     try {
-      await saveMap(mapName);
-      setIsSavingMap(false);
-      setMapName('');
-      await fetchTemplates();
-    } catch (err) {
-      console.error("Failed to save map:", err);
+      if (editorMode === 'company') {
+        if (currentMap) {
+          await axios.post('http://localhost:8000/map/sync', currentMap);
+          setIsEditingMap(false);
+          alert("오피스 배치가 저장되었습니다!");
+          fetchTemplates();
+        }
+      } else {
+        if (!mapName.trim()) return;
+        await saveMap(mapName);
+        setIsSavingMap(false);
+        setMapName('');
+        alert("새 모듈이 저장되었습니다!");
+        fetchTemplates();
+      }
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+        setShowUpgradeModal(true);
+      } else {
+        console.error("Failed to save map:", err);
+      }
     }
   };
 
@@ -197,6 +314,9 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
             setIsEditingMap={setIsEditingMap}
             buildMode={buildMode}
             toggleBuildMode={toggleBuildMode}
+            enterOfficeArchitect={enterOfficeArchitect}
+            enterModuleLab={enterModuleLab}
+            scrollToStarters={scrollToStarters}
           />
 
           <StaffSection
@@ -218,10 +338,31 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
 
       {/* Overlay & Modals */}
       <MapEditorOverlay
-        isOpen={isEditingMap} onClose={() => setIsEditingMap(false)} currentMap={currentMap}
-        buildMode={buildMode} toggleBuildMode={toggleBuildMode} setBuildBrush={setSelectedTool}
-        buildBrush={selectedTool} handleSaveMap={() => setIsSavingMap(true)}
-        setIsZoneModalOpen={setIsZoneModalOpen} handleRemoveZone={handleRemoveZone}
+        isOpen={isEditingMap} 
+        onClose={() => {
+          setIsEditingMap(false);
+          const { selectedCompanyId, setMap } = useGameStore.getState();
+          if (selectedCompanyId && templates?.companies && templates.companies[selectedCompanyId]) {
+            setMap(templates.companies[selectedCompanyId]);
+          } else {
+            setMap(null);
+          }
+        }} 
+        currentMap={currentMap}
+        buildMode={buildMode} 
+        toggleBuildMode={toggleBuildMode} 
+        setBuildBrush={setSelectedTool}
+        buildBrush={selectedTool} 
+        handleSaveMap={() => {
+          const { editorMode } = useGameStore.getState();
+          if (editorMode === 'company') {
+            handleSaveMap(); // Syncs directly
+          } else {
+            setIsSavingMap(true); // Opens naming modal for module
+          }
+        }}
+        setIsZoneModalOpen={setIsZoneModalOpen} 
+        handleRemoveZone={handleRemoveZone}
       />
 
       <HiringModal
@@ -239,6 +380,8 @@ export function SetupPage({ onStart, onBack }: SetupPageProps) {
         isOpen={isSavingMap} onClose={() => setIsSavingMap(false)}
         name={mapName} setName={setMapName} onSave={handleSaveMap}
       />
+
+      <UpgradeModal />
     </div>
   );
 }

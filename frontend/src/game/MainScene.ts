@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { useGameStore } from '../store/useGameStore';
-import { placeObstacle, removeObstacle, setZoneTile, getMapCurrent, mergeMap } from '../services/api';
+import { placeObstacle, removeObstacle, setZoneTile, getMapCurrent, mergeMap, syncMapData, mergeMapRawData, assignObstacle } from '../services/api';
 
 export class MainScene extends Phaser.Scene {
   constructor() { super('MainScene'); }
@@ -14,10 +14,13 @@ export class MainScene extends Phaser.Scene {
   private previewSprite!: Phaser.GameObjects.Sprite;
   private previewRect!: Phaser.GameObjects.Graphics;
   private selectionRect!: Phaser.GameObjects.Graphics;
+  private moduleGhostContainer!: Phaser.GameObjects.Container;
   private dragStart: { x: number, y: number } | null = null;
 
   private tileWidth: number = 160;
   private tileHeight: number = 80;
+  private gridGraphics!: Phaser.GameObjects.Graphics;
+  private uiLayer!: Phaser.GameObjects.Container;
 
   preload() {
     this.load.spritesheet('floor_sheet', 'assets/floor_sheet.png', { frameWidth: 256, frameHeight: 256 });
@@ -53,13 +56,36 @@ export class MainScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#05080f');
     this.mapContainer = this.add.container(0, 0);
     this.mapLayer = this.add.container(0, 0);
+    this.uiLayer = this.add.container(0, 0);
     this.mapContainer.add(this.mapLayer);
+    this.mapContainer.add(this.uiLayer);
 
     this.previewContainer = this.add.container(0, 0).setAlpha(0.6).setDepth(10000).setVisible(false);
     this.previewSprite = this.add.sprite(0, 0, 'furniture_sheet', 0).setOrigin(0.5, 0.78);
+    this.gridGraphics = this.add.graphics();
+    this.uiLayer.add(this.gridGraphics);
+
+    // Create a beautiful background gradient for "Floating Island" feel
+    const bgGraphics = this.add.graphics();
+    bgGraphics.fillGradientStyle(0x0a0f1e, 0x0a0f1e, 0x1a233e, 0x1a233e, 1);
+    bgGraphics.fillRect(-2000, -2000, 4000, 4000);
+    bgGraphics.setDepth(-100);
+    
+    // Add some subtle stars or clouds
+    for (let i = 0; i < 100; i++) {
+      const x = Phaser.Math.Between(-1500, 1500);
+      const y = Phaser.Math.Between(-1500, 1500);
+      this.add.circle(x, y, Phaser.Math.FloatBetween(0.5, 1.5), 0x00f2ff, Phaser.Math.FloatBetween(0.1, 0.4)).setDepth(-99);
+    }
+
+    this.drawGrid();
+
     this.previewRect = this.add.graphics();
     this.previewContainer.add([this.previewRect, this.previewSprite]);
     this.mapContainer.add(this.previewContainer);
+
+    this.moduleGhostContainer = this.add.container(0, 0).setAlpha(0.5).setDepth(10001);
+    this.mapContainer.add(this.moduleGhostContainer);
 
     this.selectionRect = this.add.graphics().setDepth(11000);
     this.mapContainer.add(this.selectionRect);
@@ -104,12 +130,39 @@ export class MainScene extends Phaser.Scene {
 
     const { currentMap } = useGameStore.getState();
     if (currentMap) this.syncMap(currentMap);
+
+    // Keyboard Shortcuts
+    this.input.keyboard?.on('keydown-Z', (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        this.performUndo();
+      }
+    });
+
+    // Cleanup on shutdown or destroy
+    this.events.once('shutdown', () => {
+      this.unsubscribers.forEach(unsub => unsub());
+      this.unsubscribers = [];
+    });
+    this.events.once('destroy', () => {
+      this.unsubscribers.forEach(unsub => unsub());
+      this.unsubscribers = [];
+    });
+  }
+
+  private async performUndo() {
+    const { undo } = useGameStore.getState();
+    const lastMap = undo();
+    if (lastMap) {
+      await syncMapData(lastMap);
+      this.syncMap(lastMap);
+    }
   }
 
   private setupSubscriptions() {
     this.unsubscribers.push(
       useGameStore.subscribe((s) => s.agents, (a) => this.syncAgents(a)),
-      useGameStore.subscribe((s) => s.currentMap, (m) => m && this.syncMap(m))
+      useGameStore.subscribe((s) => s.currentMap, (m) => m && this.syncMap(m)),
+      useGameStore.subscribe((s) => s.buildMode, () => this.drawGrid())
     );
   }
 
@@ -124,20 +177,43 @@ export class MainScene extends Phaser.Scene {
     if (isOut) {
       this.previewContainer.setVisible(false);
       this.selectionRect.clear();
+      this.moduleGhostContainer.removeAll(true).setVisible(false);
       return;
     }
 
     const iso = this.cartToIso(cart.x, cart.y);
 
-    if (selectedTool === 'module_stamp' && selectedModuleInfo) {
+    if ((selectedTool === 'module_stamp' && selectedModuleInfo) || (selectedTool === 'move_stamp' && useGameStore.getState().moveBuffer)) {
       this.previewContainer.setVisible(true).setPosition(iso.x, iso.y + this.tileHeight / 2);
       this.previewSprite.setVisible(false);
       this.previewRect.clear().lineStyle(3, 0x00f2ff, 1).fillStyle(0x00f2ff, 0.15);
       
-      const sw = selectedModuleInfo.width, sh = selectedModuleInfo.height;
+      const isMove = selectedTool === 'move_stamp';
+      const buffer = isMove ? useGameStore.getState().moveBuffer : null;
+      const info = isMove ? { width: buffer.width, height: buffer.height } : selectedModuleInfo;
+      
+      const sw = info!.width, sh = info!.height;
       const ox = -Math.floor(sw / 2), oy = -Math.floor(sh / 2);
       
-      // Calculate 4 corners of the module centered on mouse
+      // Update Ghost Container
+      this.moduleGhostContainer.setPosition(iso.x, iso.y + this.tileHeight / 2).setVisible(true);
+      if (this.moduleGhostContainer.list.length === 0) {
+        const obsList = isMove ? buffer.obstacles : [];
+        obsList.forEach((obs: any) => {
+          const oIso = this.cartToIso(ox + obs.x, oy + obs.y);
+          if (obs.type === 'obstacle_wall') {
+            const frame = (obs.x === 0 || obs.y === 0) ? 0 : 1;
+            const wall = this.add.sprite(oIso.x, oIso.y, 'walls_sheet', frame).setOrigin(0.5, 0.86).setDisplaySize(this.tileWidth * 1.02, this.tileWidth * 1.45).setTint(0x00f2ff);
+            this.moduleGhostContainer.add(wall);
+          } else {
+            let f = 0;
+            if (obs.type.includes('chair')) f = 5; else if (obs.type.includes('plant')) f = 10; else if (obs.type.includes('table')) f = 8; else if (obs.type.includes('server')) f = 12;
+            const sprite = this.add.sprite(oIso.x, oIso.y, 'furniture_sheet', f).setOrigin(0.5, 0.78).setDisplaySize(this.tileWidth * 1.3, this.tileWidth * 1.3).setFlipX(obs.flip_x || false).setTint(0x00f2ff);
+            this.moduleGhostContainer.add(sprite);
+          }
+        });
+      }
+      
       const p1 = this.cartToIso(ox, oy);
       const p2 = this.cartToIso(ox + sw, oy);
       const p3 = this.cartToIso(ox + sw, oy + sh);
@@ -147,6 +223,7 @@ export class MainScene extends Phaser.Scene {
       this.previewRect.fillPoints(poly, true).strokePoints(poly, true);
 
     } else if (selectedTool.startsWith('obstacle_')) {
+      this.moduleGhostContainer.removeAll(true).setVisible(false);
       this.previewContainer.setVisible(true).setPosition(iso.x, iso.y + this.tileHeight / 2);
       this.previewSprite.setVisible(true);
       this.previewRect.clear().lineStyle(2, 0x00f2ff, 0.8);
@@ -163,10 +240,12 @@ export class MainScene extends Phaser.Scene {
         else if (selectedTool.includes('server')) frame = 12;
         this.previewSprite.setTexture('furniture_sheet').setFrame(frame).setOrigin(0.5, 0.78).setDisplaySize(this.tileWidth * 1.3, this.tileWidth * 1.3);
       }
-    } else if (buildMode && (selectedTool.startsWith('zone_') || selectedTool === 'tile_eraser') && this.dragStart) {
+    } else if (buildMode && (selectedTool.startsWith('zone_') || selectedTool === 'tile_eraser' || selectedTool === 'move_tool') && this.dragStart) {
+      this.moduleGhostContainer.removeAll(true).setVisible(false);
       this.previewContainer.setVisible(false);
       this.drawSelection(this.dragStart, cart);
     } else {
+      this.moduleGhostContainer.removeAll(true).setVisible(false);
       this.previewContainer.setVisible(false);
       this.selectionRect.clear();
     }
@@ -185,7 +264,7 @@ export class MainScene extends Phaser.Scene {
   }
 
   private syncMap(data: any) {
-    if (!this.sys.game.canvas) return;
+    if (!this.sys || !this.sys.game || !this.sys.game.canvas) return;
     this.mapLayer.removeAll(true);
     const canvasW = this.sys.game.canvas.width, canvasH = this.sys.game.canvas.height;
     this.tileWidth = 160; this.tileHeight = 80;
@@ -226,19 +305,31 @@ export class MainScene extends Phaser.Scene {
         tile.fillPoints([{x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx, y: cy + th/2 + thickness}, {x: cx + tw/2, y: cy + thickness}], true);
 
         // 3. Top Face
-        const topColor = z ? 0x2a2d35 : 0x3a3d45;
+        let topColor = 0x2a2d35;
+        if (z === 'neon_border') topColor = 0x001f3f;
+        else if (z === 'grid_dot') topColor = 0x1a1a1a;
+        else if (z === 'premium_carpet') topColor = 0x2d1b4d;
+        else if (z && z !== 'none' && z !== 'void') topColor = 0x3a3d45;
+
         tile.fillStyle(topColor, alpha);
         tile.fillPoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
+
+        // Neon border highlight
+        if (z === 'neon_border' && alpha > 0.5) {
+          tile.lineStyle(2, 0x00f2ff, 0.5);
+          tile.strokePoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
+        }
         
         // 4. Panel details
-        tile.lineStyle(1, 0x4a4d55, 0.3 * alpha);
+        tile.lineStyle(1, 0x4a4d55, 0.1 * alpha);
         tile.strokePoints([{x: cx, y: cy - th/2}, {x: cx + tw/2, y: cy}, {x: cx, y: cy + th/2}, {x: cx - tw/2, y: cy}], true);
         this.mapLayer.add(tile);
 
-        // Zone overlay (editor only)
-        if (z && isBuild) {
+        // Zone overlay (editor only or specific functional zones)
+        if (z && z !== 'none' && z !== 'void' && !['neon_border', 'grid_dot', 'premium_carpet'].includes(z)) {
           const zoneColors: Record<string, number> = {
-            work: 0x4488ff, meeting: 0x44ff88, break: 0xffcc44, lab: 0xaa44ff, ceo: 0xff4444
+            work: 0x4488ff, meeting: 0x44ff88, break: 0xffcc44, lab: 0xaa44ff, ceo: 0xff4444,
+            Reception: 0x00f2ff, "Dev Cluster": 0x3b82f6, "CEO Suite": 0xa855f7
           };
           const zc = zoneColors[z] || 0x4488ff;
           const ov = this.add.graphics().setDepth(iso.y + 0.5);
@@ -252,18 +343,34 @@ export class MainScene extends Phaser.Scene {
     }
 
     if (data.obstacles) {
+      const { agents } = useGameStore.getState();
       data.obstacles.forEach((obs: any, idx: number) => {
         const iso = this.cartToIso(obs.x, obs.y);
+        const cy = iso.y + this.tileHeight / 2;
+        
         if (obs.type === 'obstacle_wall') {
           const frame = (obs.x === 0 || obs.y === 0) ? 0 : 1;
-          const wall = this.add.sprite(iso.x, iso.y + this.tileHeight / 2, 'walls_sheet', frame).setOrigin(0.5, 0.86).setDisplaySize(this.tileWidth * 1.02, this.tileWidth * 1.45).setDepth(iso.y + 200);
+          const wall = this.add.sprite(iso.x, cy, 'walls_sheet', frame).setOrigin(0.5, 0.86).setDisplaySize(this.tileWidth * 1.02, this.tileWidth * 1.45).setDepth(iso.y + 200);
           this.mapLayer.add(wall);
         } else {
           let f = (idx % 12);
           if (obs.type.includes('chair')) f = 5; else if (obs.type.includes('plant')) f = 10; else if (obs.type.includes('table')) f = 8; else if (obs.type.includes('server')) f = 12;
-          this.mapLayer.add(this.add.circle(iso.x, iso.y + this.tileHeight / 2, this.tileWidth / 4, 0x00f2ff, 0.1).setDepth(iso.y + 0.2));
-          this.mapLayer.add(this.add.ellipse(iso.x, iso.y + this.tileHeight / 2 + 5, this.tileWidth * 0.4, this.tileHeight * 0.4, 0x000000, 0.3).setDepth(iso.y + 0.1));
-          this.mapLayer.add(this.add.sprite(iso.x, iso.y + this.tileHeight / 2, 'furniture_sheet', f).setOrigin(0.5, 0.78).setDisplaySize(this.tileWidth * 1.3, this.tileWidth * 1.3).setFlipX(obs.flip_x || false).setDepth(iso.y + 60));
+          this.mapLayer.add(this.add.circle(iso.x, cy, this.tileWidth / 4, 0x00f2ff, 0.1).setDepth(iso.y + 0.2));
+          this.mapLayer.add(this.add.ellipse(iso.x, cy + 5, this.tileWidth * 0.4, this.tileHeight * 0.4, 0x000000, 0.3).setDepth(iso.y + 0.1));
+          this.mapLayer.add(this.add.sprite(iso.x, cy, 'furniture_sheet', f).setOrigin(0.5, 0.78).setDisplaySize(this.tileWidth * 1.3, this.tileWidth * 1.3).setFlipX(obs.flip_x || false).setDepth(iso.y + 60));
+          
+          // Show Owner Name
+          if (obs.owner_id && agents[obs.owner_id]) {
+            const ownerName = agents[obs.owner_id].name;
+            const tag = this.add.text(iso.x, cy - 60, `[ ${ownerName} ]`, { 
+              fontFamily: 'NeoDunggeunmo', 
+              fontSize: '12px', 
+              color: '#ffffff',
+              backgroundColor: '#00f2ff44',
+              padding: { x: 4, y: 2 }
+            }).setOrigin(0.5, 1).setDepth(iso.y + 300);
+            this.mapLayer.add(tag);
+          }
         }
       });
     }
@@ -296,16 +403,93 @@ export class MainScene extends Phaser.Scene {
     this.selectionRect.fillPoints(poly, true).strokePoints(poly, true);
   }
 
+  private drawGrid() {
+    if (!this.gridGraphics) return;
+    this.gridGraphics.clear();
+    const { buildMode, getPlanLimit } = useGameStore.getState();
+    const limit = getPlanLimit();
+
+    if (!buildMode) return;
+
+    this.gridGraphics.lineStyle(1, 0x00f2ff, 0.05);
+
+    const fullSize = 24;
+    for (let i = 0; i <= fullSize; i++) {
+      const s1 = this.cartToIso(i, 0), e1 = this.cartToIso(i, fullSize);
+      this.gridGraphics.lineBetween(s1.x, s1.y, e1.x, e1.y);
+      const s2 = this.cartToIso(0, i), e2 = this.cartToIso(fullSize, i);
+      this.gridGraphics.lineBetween(s2.x, s2.y, e2.x, e2.y);
+    }
+
+    this.gridGraphics.lineStyle(2, 0x00f2ff, 0.4);
+    const g1 = this.cartToIso(0, 0), g2 = this.cartToIso(limit, 0), g3 = this.cartToIso(limit, limit), g4 = this.cartToIso(0, limit);
+    this.gridGraphics.strokePoints([g1, g2, g3, g4], true);
+    this.gridGraphics.fillStyle(0x00f2ff, 0.02).fillPoints([g1, g2, g3, g4], true);
+  }
+
   private async handleMapAction(s: { x: number, y: number }, e: { x: number, y: number }) {
-    const { selectedTool, selectedModule, currentMap } = useGameStore.getState();
+    const { currentMap, selectedTool, selectedModule, pushHistory, getPlanLimit, setShowUpgradeModal } = useGameStore.getState();
     if (!currentMap) return;
     
-    // Bounds check
-    if (e.x < 0 || e.y < 0 || e.x >= currentMap.width || e.y >= currentMap.height) return;
+    const limit = getPlanLimit();
+    
+    // Boundary check for all building actions
+    if (e.x >= limit || e.y >= limit) {
+      if (selectedTool !== 'none' && selectedTool !== 'move_tool') {
+        setShowUpgradeModal(true);
+        return;
+      }
+    }
 
-    const x1 = Math.min(s.x, e.x), y1 = Math.min(s.y, e.y), x2 = Math.max(s.x, e.x), y2 = Math.max(s.y, e.y);
+    // Save snapshot before action
+    pushHistory(currentMap);
+
+    // Clamp coordinates to map bounds to prevent negative or out-of-bounds API calls
+    const x1 = Phaser.Math.Clamp(Math.min(s.x, e.x), 0, currentMap.width - 1);
+    const y1 = Phaser.Math.Clamp(Math.min(s.y, e.y), 0, currentMap.height - 1);
+    const x2 = Phaser.Math.Clamp(Math.max(s.x, e.x), 0, currentMap.width - 1);
+    const y2 = Phaser.Math.Clamp(Math.max(s.y, e.y), 0, currentMap.height - 1);
+
     try {
       if (selectedTool === 'eraser') await removeObstacle(e.x, e.y);
+      else if (selectedTool === 'module_stamp' && selectedModule) {
+        const res = await mergeMap(selectedModule, e.x, e.y);
+        if (res.map) useGameStore.getState().setMap(res.map);
+      }
+      else if (selectedTool === 'move_stamp' && useGameStore.getState().moveBuffer) {
+        const res = await mergeMapRawData(useGameStore.getState().moveBuffer, e.x, e.y);
+        if (res.map) useGameStore.getState().setMap(res.map);
+        useGameStore.getState().setSelectedTool('move_tool');
+        useGameStore.getState().setMoveBuffer(null);
+      }
+      else if (selectedTool === 'move_tool') {
+        const m = currentMap;
+        const newW = x2 - x1 + 1, newH = y2 - y1 + 1;
+        const bufferZone = Array.from({ length: newH }, (_, y) => Array.from({ length: newW }, (_, x) => m.zone_data[y1 + y][x1 + x]));
+        const bufferObs = m.obstacles.filter((o: any) => o.x >= x1 && o.x <= x2 && o.y >= y1 && o.y <= y2)
+                                     .map((o: any) => ({ ...o, x: o.x - x1, y: o.y - y1 }));
+        
+        // Ensure ALL required MapTemplate fields are present
+        const buffer = { 
+          id: 'temp_move', 
+          name: 'MoveBuffer', 
+          width: newW, 
+          height: newH, 
+          zone_data: bufferZone, 
+          zones: [], // Fixed: Missing field caused 422 error
+          obstacles: bufferObs 
+        };
+        
+        useGameStore.getState().setMoveBuffer(buffer);
+
+        const updatedMap = JSON.parse(JSON.stringify(m));
+        for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) updatedMap.zone_data[j][i] = 'void';
+        updatedMap.obstacles = m.obstacles.filter((o: any) => !(o.x >= x1 && o.x <= x2 && o.y >= y1 && o.y <= y2));
+        
+        await syncMapData(updatedMap);
+        this.syncMap(updatedMap);
+        useGameStore.getState().setSelectedTool('move_stamp');
+      }
       else if (selectedTool === 'tile_eraser') {
         for (let j = y1; j <= y2; j++) {
           for (let i = x1; i <= x2; i++) {
@@ -313,20 +497,36 @@ export class MainScene extends Phaser.Scene {
             if (this.hasObstacleAt(useGameStore.getState().currentMap, i, j)) await removeObstacle(i, j);
           }
         }
+        const updatedMap = await getMapCurrent();
+        useGameStore.getState().setMap(updatedMap);
       }
-      else if (selectedTool === 'module_stamp' && selectedModule) {
-        await mergeMap(selectedModule, e.x, e.y);
+      else if (selectedTool === 'assign_seat') {
+        const { agents } = useGameStore.getState();
+        const agentIds = Object.keys(agents);
+        const obs = currentMap.obstacles.find((o: any) => o.x === e.x && o.y === e.y);
+        
+        if (obs) {
+          const currentOwner = obs.owner_id;
+          const currentIndex = currentOwner ? agentIds.indexOf(currentOwner) : -1;
+          let nextOwner = null;
+          
+          if (currentIndex < agentIds.length - 1) {
+            nextOwner = agentIds[currentIndex + 1];
+          }
+          
+          await assignObstacle(e.x, e.y, nextOwner);
+        }
       }
       else if (selectedTool.startsWith('zone_')) {
         for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) await setZoneTile(i, j, selectedTool.replace('zone_', ''));
+        const updatedMap = await getMapCurrent();
+        useGameStore.getState().setMap(updatedMap);
       } else if (selectedTool.startsWith('obstacle_')) {
         const { selectedRotation, selectedFlipX } = useGameStore.getState();
         await placeObstacle(e.x, e.y, selectedTool, selectedRotation, selectedFlipX);
+        const updatedMap = await getMapCurrent();
+        useGameStore.getState().setMap(updatedMap);
       }
-      
-      // 즉시 맵 갱신 (실시간 피드백)
-      const updatedMap = await getMapCurrent();
-      useGameStore.getState().setMap(updatedMap);
     } catch (err) {
       console.error('Map action failed:', err);
     }

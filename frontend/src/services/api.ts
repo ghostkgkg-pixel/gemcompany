@@ -53,6 +53,22 @@ export const setZoneTile = async (x: number, y: number, zoneType: string) => {
   return response.data;
 };
 
+export const syncMapData = async (map: any) => {
+  const response = await axios.post(`${API_BASE}/map/sync`, map);
+  return response.data;
+};
+
+export const assignObstacle = async (x: number, y: number, agentId: string | null) => {
+  const url = `${API_BASE}/map/obstacles/assign?x=${x}&y=${y}${agentId ? `&agent_id=${agentId}` : ''}`;
+  const response = await axios.post(url);
+  return response.data;
+};
+
+export const mergeMapRawData = async (source: any, targetX: number, targetY: number) => {
+  const response = await axios.post(`${API_BASE}/map/merge_data?target_x=${targetX}&target_y=${targetY}`, source);
+  return response.data;
+};
+
 export const mergeMap = async (sourceName: string, targetX: number, targetY: number) => {
   const response = await axios.post(`${API_BASE}/map/merge?source_name=${encodeURIComponent(sourceName)}&target_x=${targetX}&target_y=${targetY}`);
   return response.data;
@@ -80,5 +96,15 @@ export const getMapTemplates = async () => {
 
 export const removeZone = async (name: string) => {
   const response = await axios.post(`${API_BASE}/map/zones/remove?name=${encodeURIComponent(name)}`);
+  return response.data;
+};
+
+export const getPlan = async () => {
+  const response = await axios.get(`${API_BASE}/account/plan`);
+  return response.data;
+};
+
+export const upgradePlan = async (plan: string) => {
+  const response = await axios.post(`${API_BASE}/account/plan/upgrade?plan=${plan}`);
   return response.data;
 };

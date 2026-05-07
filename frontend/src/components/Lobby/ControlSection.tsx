@@ -1,5 +1,6 @@
 import { Play } from 'lucide-react';
 import { CyberPanel, CyberButton } from '../Common/CyberUI';
+import { useGameStore } from '../../store/useGameStore';
 
 interface ControlSectionProps {
   spawnDesc: string;
@@ -78,7 +79,8 @@ export const ControlSection = ({
             <div className="mt-auto">
                <button 
                  onClick={onStart}
-                 className="w-full group relative overflow-hidden rounded-2xl transition-all duration-500 hover:scale-[1.01] active:scale-95"
+                 disabled={!useGameStore.getState().selectedCompanyId}
+                 className={`w-full group relative overflow-hidden rounded-2xl transition-all duration-500 ${!useGameStore.getState().selectedCompanyId ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:scale-[1.01] active:scale-95'}`}
                >
                  <div className="absolute inset-0 bg-[#00f2ff] opacity-80 group-hover:opacity-100 transition-opacity" />
                  <div className="relative py-4 flex flex-col items-center justify-center gap-1 border-4 border-white/20">
