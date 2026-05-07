@@ -53,6 +53,11 @@ export const setZoneTile = async (x: number, y: number, zoneType: string) => {
   return response.data;
 };
 
+export const mergeMap = async (sourceName: string, targetX: number, targetY: number) => {
+  const response = await axios.post(`${API_BASE}/map/merge?source_name=${encodeURIComponent(sourceName)}&target_x=${targetX}&target_y=${targetY}`);
+  return response.data;
+};
+
 export const saveMap = async (name: string) => {
   const response = await axios.post(`${API_BASE}/map/save?name=${encodeURIComponent(name)}`);
   return response.data;
@@ -65,6 +70,11 @@ export const deleteMap = async (name: string) => {
 
 export const addZone = async (name: string, x1: number, y1: number, x2: number, y2: number, color: string) => {
   const response = await axios.post(`${API_BASE}/map/zones/add?name=${encodeURIComponent(name)}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&color=${encodeURIComponent(color)}`);
+  return response.data;
+};
+
+export const getMapTemplates = async () => {
+  const response = await axios.get(`${API_BASE}/map/templates`);
   return response.data;
 };
 

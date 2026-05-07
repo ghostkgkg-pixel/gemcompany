@@ -807,12 +807,53 @@ async def remove_zone(req: ZoneRemoveRequest):
     return {"message": "Zone removed", "zones": m.zones}
 
 
+@app.post("/map/merge")
+async def merge_map(source_name: str, target_x: int, target_y: int):
+    global current_map
+    if source_name not in USER_SAVED_MAPS:
+        raise HTTPException(status_code=404, detail="Source module not found")
+    
+    # Deep copy to prevent original data corruption
+    source = USER_SAVED_MAPS[source_name].model_copy(deep=True)
+    m = (current_map or MAP_TEMPLATES["standard_office"]).model_copy(deep=True)
+    
+    # Center the module on the click point
+    start_x = target_x - (source.width // 2)
+    start_y = target_y - (source.height // 2)
+    
+    # 1. Clear existing obstacles in the target bounding box
+    m.obstacles = [
+        obs for obs in m.obstacles 
+        if not (start_x <= obs.x < start_x + source.width and start_y <= obs.y < start_y + source.height)
+    ]
+    
+    # 2. Copy zone data
+    for sy in range(source.height):
+        for sx in range(source.width):
+            tx, ty = start_x + sx, start_y + sy
+            if 0 <= tx < m.width and 0 <= ty < m.height:
+                m.zone_data[ty][tx] = source.zone_data[sy][sx]
+    
+    # 3. Copy obstacles
+    for obs in source.obstacles:
+        tx, ty = start_x + obs.x, start_y + obs.y
+        if 0 <= tx < m.width and 0 <= ty < m.height:
+            m.obstacles.append(MapObstacle(x=tx, y=ty, type=obs.type, rotation=obs.rotation, flip_x=obs.flip_x))
+            
+    current_map = m
+    await broadcast_map(m.model_dump())
+    save_state()
+    return {"message": f"Module '{source_name}' merged at ({target_x}, {target_y})"}
+
+
 @app.post("/map/save")
 async def save_map(name: str):
     global current_map
     if current_map:
-        current_map.name = name
-        USER_SAVED_MAPS[name] = current_map
+        # Deep copy to decouple from runtime state
+        saved_blueprint = current_map.model_copy(deep=True)
+        saved_blueprint.name = name
+        USER_SAVED_MAPS[name] = saved_blueprint
         save_state()
         return {"message": f"Map '{name}' saved successfully"}
     raise HTTPException(status_code=400, detail="No map to save")

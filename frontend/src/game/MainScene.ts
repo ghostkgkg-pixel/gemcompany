@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { useGameStore } from '../store/useGameStore';
-import { placeObstacle, removeObstacle, setZoneTile, getMapCurrent } from '../services/api';
+import { placeObstacle, removeObstacle, setZoneTile, getMapCurrent, mergeMap } from '../services/api';
 
 export class MainScene extends Phaser.Scene {
   constructor() { super('MainScene'); }
@@ -114,14 +114,41 @@ export class MainScene extends Phaser.Scene {
   }
 
   private updatePreview(p: Phaser.Input.Pointer) {
-    const { buildMode, selectedTool } = useGameStore.getState();
-    if (!this.mapContainer || !buildMode) return;
+    const { buildMode, selectedTool, selectedModuleInfo, currentMap } = useGameStore.getState();
+    if (!this.mapContainer || !buildMode || !currentMap) return;
 
     const cart = this.worldToCart(p.worldX, p.worldY);
+    
+    // Bounds Check
+    const isOut = cart.x < 0 || cart.y < 0 || cart.x >= currentMap.width || cart.y >= currentMap.height;
+    if (isOut) {
+      this.previewContainer.setVisible(false);
+      this.selectionRect.clear();
+      return;
+    }
+
     const iso = this.cartToIso(cart.x, cart.y);
 
-    if (buildMode && selectedTool.startsWith('obstacle_')) {
+    if (selectedTool === 'module_stamp' && selectedModuleInfo) {
       this.previewContainer.setVisible(true).setPosition(iso.x, iso.y + this.tileHeight / 2);
+      this.previewSprite.setVisible(false);
+      this.previewRect.clear().lineStyle(3, 0x00f2ff, 1).fillStyle(0x00f2ff, 0.15);
+      
+      const sw = selectedModuleInfo.width, sh = selectedModuleInfo.height;
+      const ox = -Math.floor(sw / 2), oy = -Math.floor(sh / 2);
+      
+      // Calculate 4 corners of the module centered on mouse
+      const p1 = this.cartToIso(ox, oy);
+      const p2 = this.cartToIso(ox + sw, oy);
+      const p3 = this.cartToIso(ox + sw, oy + sh);
+      const p4 = this.cartToIso(ox, oy + sh);
+      
+      const poly = [{x: p1.x, y: p1.y - this.tileHeight/2}, {x: p2.x, y: p2.y - this.tileHeight/2}, {x: p3.x, y: p3.y - this.tileHeight/2}, {x: p4.x, y: p4.y - this.tileHeight/2}];
+      this.previewRect.fillPoints(poly, true).strokePoints(poly, true);
+
+    } else if (selectedTool.startsWith('obstacle_')) {
+      this.previewContainer.setVisible(true).setPosition(iso.x, iso.y + this.tileHeight / 2);
+      this.previewSprite.setVisible(true);
       this.previewRect.clear().lineStyle(2, 0x00f2ff, 0.8);
       this.previewRect.strokePoints([{ x: 0, y: -this.tileHeight / 2 }, { x: this.tileWidth / 2, y: 0 }, { x: 0, y: this.tileHeight / 2 }, { x: -this.tileWidth / 2, y: 0 }], true);
 
@@ -270,7 +297,12 @@ export class MainScene extends Phaser.Scene {
   }
 
   private async handleMapAction(s: { x: number, y: number }, e: { x: number, y: number }) {
-    const { selectedTool } = useGameStore.getState();
+    const { selectedTool, selectedModule, currentMap } = useGameStore.getState();
+    if (!currentMap) return;
+    
+    // Bounds check
+    if (e.x < 0 || e.y < 0 || e.x >= currentMap.width || e.y >= currentMap.height) return;
+
     const x1 = Math.min(s.x, e.x), y1 = Math.min(s.y, e.y), x2 = Math.max(s.x, e.x), y2 = Math.max(s.y, e.y);
     try {
       if (selectedTool === 'eraser') await removeObstacle(e.x, e.y);
@@ -281,6 +313,9 @@ export class MainScene extends Phaser.Scene {
             if (this.hasObstacleAt(useGameStore.getState().currentMap, i, j)) await removeObstacle(i, j);
           }
         }
+      }
+      else if (selectedTool === 'module_stamp' && selectedModule) {
+        await mergeMap(selectedModule, e.x, e.y);
       }
       else if (selectedTool.startsWith('zone_')) {
         for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) await setZoneTile(i, j, selectedTool.replace('zone_', ''));

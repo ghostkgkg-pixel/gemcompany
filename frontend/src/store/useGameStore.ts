@@ -27,9 +27,8 @@ interface GameState {
   agents: Record<string, Agent>;
   currentMap: any;
   buildMode: boolean;
-  selectedTool: string;
-  selectedRotation: number;
-  selectedFlipX: boolean;
+  selectedModule: string | null;
+  selectedModuleInfo: { width: number, height: number } | null;
   setAgents: (agents: Agent[]) => void;
   updateAgent: (agentId: string, updates: Partial<Agent>) => void;
   setMap: (map: any) => void;
@@ -37,6 +36,7 @@ interface GameState {
   setSelectedTool: (tool: string) => void;
   setRotation: (rotation: number) => void;
   toggleFlipX: () => void;
+  setSelectedModule: (module: string | null, info?: { width: number, height: number } | null) => void;
 }
 
 export const useGameStore = create<GameState>()(
@@ -47,6 +47,8 @@ export const useGameStore = create<GameState>()(
     selectedTool: 'obstacle_desk',
     selectedRotation: 0,
     selectedFlipX: false,
+    selectedModule: null,
+    selectedModuleInfo: null,
     setAgents: (agentList) => {
       const agentMap = agentList.reduce((acc, agent) => ({ ...acc, [agent.id]: agent }), {});
       set({ agents: agentMap });
@@ -62,5 +64,6 @@ export const useGameStore = create<GameState>()(
     setSelectedTool: (tool) => set({ selectedTool: tool }),
     setRotation: (rotation) => set({ selectedRotation: rotation }),
     toggleFlipX: () => set((state) => ({ selectedFlipX: !state.selectedFlipX })),
+    setSelectedModule: (module, info = null) => set({ selectedModule: module, selectedModuleInfo: info }),
   }))
 );
