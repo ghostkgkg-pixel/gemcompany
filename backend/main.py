@@ -21,7 +21,7 @@ from utils import (
     set_agent_action
 )
 from engine import (
-    world_tick_loop, autonomous_decision_loop, cli_worker, get_agent_lock
+    world_tick_loop, autonomous_decision_loop, get_agent_lock
 )
 
 # External Logic Imports
@@ -49,8 +49,8 @@ async def lifespan(app: FastAPI):
         
     asyncio.create_task(world_tick_loop(sio_broadcast))
     asyncio.create_task(autonomous_decision_loop(skill_router, task_classifier))
-    asyncio.create_task(cli_worker("interactive", state.interactive_queue))
-    asyncio.create_task(cli_worker("background", state.background_queue))
+    asyncio.create_task(cli_worker("interactive", state.interactive_queue, sio_broadcast))
+    asyncio.create_task(cli_worker("background", state.background_queue, sio_broadcast))
     yield
 
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*", logger=False, engineio_logger=False)
@@ -93,6 +93,51 @@ def initialize_agent_profile(agent: Agent) -> None:
         bucket["preferred_skills"] = preferred
         work_memory.save()
     hydrate_agent_runtime(agent)
+
+# --- Complex Worker Logic (Restored) ---
+async def process_agent_response(agent: Agent, response_data: Dict[str, Any], task_id: Optional[str] = None):
+    if not isinstance(response_data, dict):
+        response_data = {"thought": str(response_data), "speech": "응답 해석 오류", "action": "Idle"}
+
+    agent.current_thought = response_data.get("thought", "")
+    agent.current_speech = response_data.get("speech", "")
+    set_agent_action(agent, response_data.get("action", "Idle"), state.current_map, state.MAP_TEMPLATES)
+
+    file_out = response_data.get("file_output")
+    file_name = ""
+    if isinstance(file_out, dict) and file_out.get("name") and file_out.get("content"):
+        file_name = sanitize_filename(file_out["name"])
+        with open(os.path.join(state.OUTPUT_DIR, file_name), "w", encoding="utf-8") as f:
+            f.write(file_out["content"])
+
+    if task_id:
+        work_memory.complete_task(agent.id, task_id, response_data.get("work_result", "완료"), file_name=file_name)
+    
+    hydrate_agent_runtime(agent)
+    await broadcast_agents()
+    state.save_state()
+
+async def cli_worker(worker_id: str, queue: asyncio.PriorityQueue, sio_callback):
+    connector = GeminiConnector(default_model=FAST_MODEL)
+    loop = asyncio.get_event_loop()
+    if queue is None: return
+    while True:
+        task = await queue.get()
+        try:
+            agent = state.agents.get(task.agent_id)
+            if not agent: continue
+            async with get_agent_lock(task.agent_id):
+                if task.task_id:
+                    work_memory.mark_in_progress(task.agent_id, task.task_id)
+                    hydrate_agent_runtime(agent)
+                    await broadcast_agents()
+                
+                result = await loop.run_in_executor(None, connector.send_prompt_json, task.prompt, task.model)
+                await process_agent_response(agent, result, task.task_id)
+        except Exception as e:
+            print(f"Worker {worker_id} error: {e}")
+        finally:
+            queue.task_done()
 
 # --- API Endpoints ---
 
