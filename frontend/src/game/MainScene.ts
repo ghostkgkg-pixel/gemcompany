@@ -14,7 +14,7 @@ export class MainScene extends Phaser.Scene {
   constructor() { super('MainScene'); }
 
   // 도메인별 관리 매니저 선언
-  private isometric: IsometricManager = new IsometricManager(160, 80);
+  private isometric: IsometricManager = new IsometricManager(128, 64);
   private assets: AssetManager = new AssetManager(this);
   private map!: MapManager;
   private agents!: AgentManager;
@@ -142,12 +142,12 @@ export class MainScene extends Phaser.Scene {
   private syncMap(data: any) {
     if (!this.sys || !this.sys.game || !this.sys.game.canvas) return;
     const canvasW = this.sys.game.canvas.width, canvasH = this.sys.game.canvas.height;
-    
+
     console.log(`[MainScene] Syncing Map: ${data.name} (${data.width}x${data.height}), Obstacles: ${data.obstacles?.length || 0}`);
 
     // 맵 렌더링 (MapManager에 위임) - 바닥 레이어만 업데이트
     this.map.render(data);
-    
+
     // 맵 중앙 정렬 계산
     const mapCenter = this.isometric.cartToIso(data.width / 2, data.height / 2);
     this.mapContainer.setPosition(canvasW / 2 - mapCenter.x, canvasH / 2 - mapCenter.y);
@@ -155,48 +155,48 @@ export class MainScene extends Phaser.Scene {
     // 장애물(가구) 데이터 변경 체크 (존만 변경 시 가구 재렌더링 방지)
     const currentObsJson = JSON.stringify(data.obstacles || []);
     if (this.lastObstaclesJson === currentObsJson) {
-        return; // 가구 데이터가 동일하면 렌더링 스킵
+      return; // 가구 데이터가 동일하면 렌더링 스킵
     }
     this.lastObstaclesJson = currentObsJson;
     this.obstacleLayer.removeAll(true);
 
     // 장애물(가구) 렌더링
     if (data.obstacles && data.obstacles.length > 0) {
-        const { agents } = useGameStore.getState();
-        data.obstacles.forEach((obs: any) => {
-            const iso = this.isometric.cartToIso(obs.x, obs.y);
-            const cy = iso.y + this.isometric.tileHeight / 2;
-            
-            let sprite;
-            if (obs.type === 'obstacle_wall') {
-                const frame = (obs.x === 0 || obs.y === 0) ? 0 : 1;
-                sprite = this.add.sprite(iso.x, cy, 'walls_sheet', frame).setOrigin(0.5, 0.86).setDisplaySize(this.isometric.tileWidth * 1.02, this.isometric.tileWidth * 1.45);
-                sprite.setDepth(iso.y + 200);
-            } else if (obs.type.startsWith('obstacle_')) {
-                let f = -1;
-                if (obs.type.includes('chair')) f = 5; 
-                else if (obs.type.includes('plant')) f = 10; 
-                else if (obs.type.includes('table') || obs.type.includes('desk')) f = 8; 
-                else if (obs.type.includes('server')) f = 12;
-                
-                if (f !== -1) {
-                    sprite = this.add.sprite(iso.x, cy, 'furniture_sheet', f).setOrigin(0.5, 0.78).setDisplaySize(this.isometric.tileWidth * 1.3, this.isometric.tileWidth * 1.3);
-                    sprite.setFlipX(obs.flip_x || false);
-                    sprite.setDepth(iso.y + 60);
+      const { agents } = useGameStore.getState();
+      data.obstacles.forEach((obs: any) => {
+        const iso = this.isometric.cartToIso(obs.x, obs.y);
+        const cy = iso.y + this.isometric.tileHeight / 2;
 
-                    // 소유자 이름표 표시
-                    if (obs.owner_id && agents[obs.owner_id]) {
-                        const ownerName = agents[obs.owner_id].name;
-                        const label = this.add.text(iso.x, cy - 60, `[ ${ownerName} ]`, { 
-                            fontFamily: 'NeoDunggeunmo', fontSize: '12px', color: '#00f2ff' 
-                        }).setOrigin(0.5).setDepth(iso.y + 250);
-                        this.obstacleLayer.add(label);
-                    }
-                }
+        let sprite;
+        if (obs.type === 'obstacle_wall') {
+          const frame = (obs.x === 0 || obs.y === 0) ? 0 : 1;
+          sprite = this.add.sprite(iso.x, cy, 'walls_sheet', frame).setOrigin(0.5, 0.86).setDisplaySize(this.isometric.tileWidth * 1.02, this.isometric.tileWidth * 1.45);
+          sprite.setDepth(iso.y + 200);
+        } else if (obs.type.startsWith('obstacle_')) {
+          let f = -1;
+          if (obs.type.includes('chair')) f = 5;
+          else if (obs.type.includes('plant')) f = 10;
+          else if (obs.type.includes('table') || obs.type.includes('desk')) f = 8;
+          else if (obs.type.includes('server')) f = 12;
+
+          if (f !== -1) {
+            sprite = this.add.sprite(iso.x, cy, 'furniture_sheet', f).setOrigin(0.5, 0.78).setDisplaySize(this.isometric.tileWidth * 1.3, this.isometric.tileWidth * 1.3);
+            sprite.setFlipX(obs.flip_x || false);
+            sprite.setDepth(iso.y + 60);
+
+            // 소유자 이름표 표시
+            if (obs.owner_id && agents[obs.owner_id]) {
+              const ownerName = agents[obs.owner_id].name;
+              const label = this.add.text(iso.x, cy - 60, `[ ${ownerName} ]`, {
+                fontFamily: 'NeoDunggeunmo', fontSize: '12px', color: '#00f2ff'
+              }).setOrigin(0.5).setDepth(iso.y + 250);
+              this.obstacleLayer.add(label);
             }
-            
-            if (sprite) this.obstacleLayer.add(sprite);
-        });
+          }
+        }
+
+        if (sprite) this.obstacleLayer.add(sprite);
+      });
     }
   }
 

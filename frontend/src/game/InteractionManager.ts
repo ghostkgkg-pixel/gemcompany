@@ -53,7 +53,7 @@ export class InteractionManager {
         this.hidePreviews();
 
         const cart = this.iso.worldToCart(p.worldX, p.worldY, this.mapContainer.x, this.mapContainer.y);
-        
+
         // 맵 범위 체크
         const isOut = cart.x < 0 || cart.y < 0 || cart.x >= currentMap.width || cart.y >= currentMap.height;
         if (isOut) {
@@ -65,11 +65,11 @@ export class InteractionManager {
         // 모듈/이동 스탬프 프리뷰 로직
         if ((selectedTool === 'module_stamp' && selectedModuleInfo) || (selectedTool === 'move_stamp' && useGameStore.getState().moveBuffer)) {
             this.handleModulePreview(selectedTool, selectedModuleInfo, isoPos);
-        } 
+        }
         // 장애물(가구) 프리뷰 로직
         else if (selectedTool.startsWith('obstacle_')) {
             this.handleObstaclePreview(selectedTool, cart, isoPos);
-        } 
+        }
         // 영역 선택(타일, 지우개 등) 프리뷰 로직
         else if (selectedTool.startsWith('zone_') || selectedTool.startsWith('floor_') || selectedTool === 'tile_eraser' || selectedTool === 'move_tool') {
             if (this.dragStart) {
@@ -100,7 +100,7 @@ export class InteractionManager {
 
         const start = this.dragStart;
         const { selectedTool, currentMap } = useGameStore.getState();
-        
+
         try {
             const x1 = Math.floor(Math.min(start.x, end.x)), x2 = Math.floor(Math.max(start.x, end.x));
             const y1 = Math.floor(Math.min(start.y, end.y)), y2 = Math.floor(Math.max(start.y, end.y));
@@ -184,8 +184,8 @@ export class InteractionManager {
         const m = useGameStore.getState().currentMap;
         const newW = x2 - x1 + 1, newH = y2 - y1 + 1;
         const bufferObs = m.obstacles.filter((o: any) => o.x >= x1 && o.x <= x2 && o.y >= y1 && o.y <= y2)
-                                     .map((o: any) => ({ ...o, x: o.x - x1, y: o.y - y1 }));
-        
+            .map((o: any) => ({ ...o, x: o.x - x1, y: o.y - y1 }));
+
         const buffer = { id: 'temp', width: newW, height: newH, obstacles: bufferObs, zone_data: [] };
         useGameStore.getState().setMoveBuffer(buffer as any);
 
@@ -201,7 +201,7 @@ export class InteractionManager {
     private async handleTileEraser(x1: number, y1: number, x2: number, y2: number) {
         const m = useGameStore.getState().currentMap;
         const newMap = JSON.parse(JSON.stringify(m));
-        
+
         if (!newMap.zone_data) newMap.zone_data = Array.from({ length: newMap.height }, () => Array(newMap.width).fill('none'));
         if (!newMap.floor_data) newMap.floor_data = Array.from({ length: newMap.height }, () => Array(newMap.width).fill('none'));
 
@@ -221,43 +221,43 @@ export class InteractionManager {
         return data.obstacles.some((o: any) => Math.floor(o.x) === x && Math.floor(o.y) === y);
     }
 
-    private handleModulePreview(tool: string, info: any, isoPos: {x: number, y: number}) {
+    private handleModulePreview(tool: string, info: any, isoPos: { x: number, y: number }) {
         const isMove = tool === 'move_stamp';
         const buffer = isMove ? useGameStore.getState().moveBuffer : null;
-        
+
         // 정보가 없으면 프리뷰 생략
         if (isMove && !buffer) return;
         if (!isMove && !info) return;
 
         const targetInfo = isMove ? { width: buffer.width, height: buffer.height } : info;
-        
+
         this.previewContainer.setVisible(true).setPosition(isoPos.x, isoPos.y + this.iso.tileHeight / 2);
         this.previewSprite.setVisible(false);
         this.previewRect.clear().lineStyle(3, 0x00f2ff, 1).fillStyle(0x00f2ff, 0.15);
-        
+
         const sw = targetInfo.width, sh = targetInfo.height;
         const ox = -Math.floor(sw / 2), oy = -Math.floor(sh / 2);
-        
+
         // 고스트 사각형 그리기 (아이소메트릭 좌표 변환)
         const p1 = this.iso.cartToIso(ox, oy);
         const p2 = this.iso.cartToIso(ox + sw, oy);
         const p3 = this.iso.cartToIso(ox + sw, oy + sh);
         const p4 = this.iso.cartToIso(ox, oy + sh);
-        
+
         const poly = [
-            {x: p1.x, y: p1.y - this.iso.tileHeight/2}, 
-            {x: p2.x, y: p2.y - this.iso.tileHeight/2}, 
-            {x: p3.x, y: p3.y - this.iso.tileHeight/2}, 
-            {x: p4.x, y: p4.y - this.iso.tileHeight/2}
+            { x: p1.x, y: p1.y - this.iso.tileHeight / 2 },
+            { x: p2.x, y: p2.y - this.iso.tileHeight / 2 },
+            { x: p3.x, y: p3.y - this.iso.tileHeight / 2 },
+            { x: p4.x, y: p4.y - this.iso.tileHeight / 2 }
         ];
-        
+
         this.previewRect.fillPoints(poly, true).strokePoints(poly, true);
     }
 
-    private handleObstaclePreview(tool: string, cart: {x: number, y: number}, isoPos: {x: number, y: number}) {
+    private handleObstaclePreview(tool: string, cart: { x: number, y: number }, isoPos: { x: number, y: number }) {
         this.moduleGhostContainer.removeAll(true).setVisible(false);
-        this.previewContainer.setVisible(true).setPosition(isoPos.x, isoPos.y + this.iso.tileHeight / 2);
-        this.previewSprite.setVisible(true);
+        this.previewContainer.setVisible(true).setPosition(isoPos.x, isoPos.y);
+        this.previewSprite.setVisible(true).setY(this.iso.tileHeight / 2);
         this.previewRect.clear().lineStyle(2, 0x00f2ff, 0.8);
         this.previewRect.strokePoints([{ x: 0, y: -this.iso.tileHeight / 2 }, { x: this.iso.tileWidth / 2, y: 0 }, { x: 0, y: this.iso.tileHeight / 2 }, { x: -this.iso.tileWidth / 2, y: 0 }], true);
 
@@ -275,7 +275,13 @@ export class InteractionManager {
         this.selectionRect.clear().lineStyle(2, 0x00f2ff, 1).fillStyle(0x00f2ff, 0.2);
         const x1 = Math.min(start.x, end.x), y1 = Math.min(start.y, end.y), x2 = Math.max(start.x, end.x), y2 = Math.max(start.y, end.y);
         const p1 = this.iso.cartToIso(x1, y1), p2 = this.iso.cartToIso(x2 + 1, y1), p3 = this.iso.cartToIso(x2 + 1, y2 + 1), p4 = this.iso.cartToIso(x1, y2 + 1);
-        const poly = [{ x: p1.x, y: p1.y }, { x: p2.x, y: p2.y }, { x: p3.x, y: p3.y }, { x: p4.x, y: p4.y }];
+        const th2 = this.iso.tileHeight / 2;
+        const poly = [
+            { x: p1.x, y: p1.y - th2 },
+            { x: p2.x, y: p2.y - th2 },
+            { x: p3.x, y: p3.y - th2 },
+            { x: p4.x, y: p4.y - th2 }
+        ];
         this.selectionRect.fillPoints(poly, true).strokePoints(poly, true);
     }
 

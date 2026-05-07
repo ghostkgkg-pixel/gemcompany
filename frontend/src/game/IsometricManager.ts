@@ -2,7 +2,7 @@
  * 등각 투영(Isometric) 좌표 변환 및 기하학적 계산을 담당하는 클래스
  */
 export class IsometricManager {
-    constructor(private tw: number, private th: number) {}
+    constructor(private tw: number, private th: number) { }
 
     /** 타일 크기 업데이트 */
     updateSize(tw: number, th: number) {
@@ -17,9 +17,9 @@ export class IsometricManager {
      * 카테시안(2D 그리드) 좌표를 등각 투영(화면) 좌표로 변환
      */
     cartToIso(x: number, y: number) {
-        return { 
-            x: (x - y) * (this.tw / 2), 
-            y: (x + y) * (this.th / 2) 
+        return {
+            x: (x - y) * (this.tw / 2),
+            y: (x + y) * (this.th / 2)
         };
     }
 
@@ -33,8 +33,8 @@ export class IsometricManager {
     worldToCart(worldX: number, worldY: number, containerX: number, containerY: number) {
         const relX = worldX - containerX;
         const relY = worldY - containerY;
-        const cx = Math.floor((relX / (this.tw / 2) + (relY - this.th / 2) / (this.th / 2)) / 2);
-        const cy = Math.floor(((relY - this.th / 2) / (this.th / 2) - relX / (this.tw / 2)) / 2);
+        const cx = Math.floor((relX / (this.tw / 2) + relY / (this.th / 2)) / 2);
+        const cy = Math.floor((relY / (this.th / 2) - relX / (this.tw / 2)) / 2);
         return { x: cx, y: cy };
     }
 }
